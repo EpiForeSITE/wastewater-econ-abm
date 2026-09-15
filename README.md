@@ -46,7 +46,14 @@ model <- ModelSEIRCONN(
   incubation_days = 7,
   recovery_rate = 1/7
 )
+```
 
+The implementation for this case is an example where we are assuming a
+high detection probability and a drastic reduction in the contact
+rate–so this is just for illustration and validation of the
+implementation.
+
+``` r
 # Adding the factory
 wastewater_detect_factory(
   model,
@@ -133,3 +140,6 @@ for (i in seq_len(nrow(wastewater_counter))) {
 ```
 
 ![](README_files/figure-commonmark/unnamed-chunk-3-1.png)
+
+As expected, throghout the simulation, as the number of cases starts
+climing, the intervention is triggered and the contact rate is reduced.
