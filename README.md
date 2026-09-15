@@ -74,7 +74,9 @@ run(model, ndays = 200, seed = 133)
     Running the model...
     ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| done.
 
-Verifying the reproductive number:
+Verifying the reproductive number. Notice that the reproductive number
+is expected to be lower since we have the intervention in place (so this
+is not an R0 but an Re):
 
 ``` r
 library(data.table)

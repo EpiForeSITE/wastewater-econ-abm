@@ -51,7 +51,7 @@ We run the model usijng the `run()` function, for 200 days and with a seed of 13
 run(model, ndays = 200, seed = 133)
 ```
 
-Verifying the reproductive number:
+Verifying the reproductive number. Notice that the reproductive number is expected to be lower since we have the intervention in place (so this is not an R0 but an Re):
 
 ```{r}
 library(data.table)
