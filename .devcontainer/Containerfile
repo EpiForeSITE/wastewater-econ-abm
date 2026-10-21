@@ -10,7 +10,11 @@ RUN wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.9.35/quar
 
 # Adding R packages
 RUN install2.r --error cpp11 roxygen2 tinytest data.table netplot \
-  devtools decor DiagrammeR quarto
+  devtools decor DiagrammeR quarto ggplot2 knitr socialmixr
+
+# Measles models (epiworldR >= 0.19.0, measles >= 0.4.1) and census helpers
+RUN installGithub.r UofUEpiBio/epiworldR UofUEpiBio/measles \
+  EpiForeSITE/multigroup-vaccine
 
 RUN apt-get update && apt-get install --no-install-recommends -y valgrind gdb \
   libglpk-dev

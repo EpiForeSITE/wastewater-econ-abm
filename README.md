@@ -1,147 +1,266 @@
-# Wastewater simulation with epiworldR
+# Measles wastewater surveillance with epiworldR
 
 
-This quarto document provides an example of how we can simulate the
-detection and an intervention based on wastewater surveillance. The
-assumption is that individuals shade at an assummed rate, and then
-wastewater is sampled and detections take place at a given probability.
-If the number of detections exceeds a threshold, then an intervention is
-triggered. Sampling of wastewater happens at a given interval (it could
-be daily or not).
+This project simulates measles outbreaks in a synthetic city of 10,000
+people and compares three scenarios:
 
-The intervention is implemented using the `globaleven_fun()` utility
-from the epiworldR package.
+1.  **Baseline**: the outbreak runs with no surveillance-triggered
+    intervention.
+2.  **Wastewater (WW)**: wastewater is sampled three times a week,
+    results are available after a lab turnaround time, and an
+    intervention starts once a result reaches a threshold.
+3.  **Cases**: a fraction of rash cases are reported after a delay, and
+    the same intervention starts once cumulative reported cases reach a
+    threshold.
 
-## Setup
+The intervention reduces the non-household contacts (school, work, and
+other settings) of school-age groups (5–19) by 80% for the rest of the
+outbreak. The WW threshold is calibrated so both triggers respond to the
+same number of cases; the difference between them is *when* each system
+sees those cases.
 
-The full implementation of the tool can be found in the file
-[intervention.R](intervention.R). The function
-`wastewater_detect_factory()` is the one that implements the
-intervention. It takes a model and a set of parameters, and returns a
-modified model with the intervention implemented.
+## Model
+
+### Population and contacts
+
+- **Disease model**: `measles::ModelMeaslesMixing()` (latent, prodromal,
+  rash, hospitalized, recovered), with one entity per 5-year age group
+  (0–4, …, 75+). Individual-level isolation, quarantine, and contact
+  tracing are off in every scenario, so the only response is the
+  triggered intervention.
+- **Age distribution**: Salt Lake County, UT (2025 Census estimates, via
+  the
+  [multigroup.vaccine](https://github.com/EpiForeSITE/multigroup-vaccine)
+  package), rescaled to 10,000 people.
+- **Contacts**: the setting-specific (household, school, work, other)
+  contact matrices from
+  [Epistorm-Mix](https://github.com/epistorm/Epistorm-Mix) (see
+  [data/epistorm](data/epistorm/README.md)), re-weighted to the county’s
+  age distribution and made reciprocal with
+  `measles::make_cmat_symmetric()`.
+- **Transmission**: the contact matrix is scaled to R0 = 7 (a
+  parameter), first analytically and then by simulation, because the
+  agent-based model realizes a lower R0 than the analytic formula. The
+  simulated R0 is 6.91. Under the intervention it drops to about 5.4;
+  school-age contacts outside the home account for only part of
+  transmission.
+- **Natural history**: 10 days latent, 4 days prodromal, and 4 days of
+  rash. That puts rash onset about 14 days after infection and makes
+  people infectious from 4 days before to 4 days after rash onset.
+  People with rash keep 50% of their contacts. 20% are hospitalized.
+
+### Wastewater shedding
+
+The shedding model follows the structure of the CDC
+[wwinference](https://github.com/CDCgov/ww-inference-model) model. The
+expected concentration on day $t$ is
+
+$$
+C(t) = \frac{1}{\alpha N} \sum_{\tau=0}^{\tau_{end}} s(\tau)\, G(t - \tau),
+$$
+
+where $G(d)$ is the total number of genome copies shed by the people
+whose prodrome started on day $d$, $\alpha$ is the wastewater volume per
+person per day, and $N$ is the population. The shedding profile
+$s(\tau)$ is piecewise linear on the log10 scale: it rises to its peak
+at $\tau_{peak}$ and declines back to zero at $\tau_{end}$, normalized
+to sum to one. Two changes from the COVID model:
+
+- $\tau$ is counted from **prodrome onset**, not infection, because
+  measles RNA appears in urine during the prodrome and peaks around rash
+  onset.
+- Each person’s total shedding is drawn from a log-normal distribution,
+  since measured measles shedding varies over four orders of magnitude.
+
+Measurements are log-normal around $C(t)$ and recorded as non-detects
+below the limit of detection (LOD).
+
+| Parameter | Value | Source |
+|----|----|----|
+| Peak shedding, days after prodrome onset ($\tau_{peak}$) | 4 (rash onset) | Prodromal and rash-onset shedding (Corchis-Scott et al. 2026) |
+| End of shedding ($\tau_{end}$) | 18 (≈14 days after rash) | Urine RNA up to 14 days (Corchis-Scott et al. 2026); RT-PCR positive up to 10+ days after rash (CDC) |
+| Peak-to-tail ratio (log10) | 3 | Assumption (shape only; profile is normalized) |
+| Copies per infection, log10 mean (SD) | 10 (1) | ≈10^8.7 copies/infection/day over ≈2 weeks (STOTEN 2024 model); median 1.4×10^11 copies/person/day, 4 orders of magnitude range (Corchis-Scott et al. 2026) |
+| Wastewater per person per day ($\alpha$) | 378,500 mL | wwinference (Ortiz 2024) |
+| Measurement SD (log scale) | 0.5 | Assumption |
+| LOD | 1 copies/mL (3 log10 copies/L) | Process LOD in STOTEN 2024 |
+| Sampling | 3 times a week | Ontario (Corchis-Scott et al. 2026) |
+| Lab turnaround | 3 days (sensitivity 0–7) | Assumption |
+| Cases reported | 50%, 3 days after rash | Assumption; Ontario estimated 5–10× under-reporting |
+| Case trigger | 5 cumulative reported cases | Assumption |
+
+With these values, one person with median shedding, on their peak day,
+in a city of 10,000 produces a concentration near the LOD, roughly in
+line with the STOTEN 2024 estimate that about 8 cases per 10,000 people
+are needed for 50% detection.
 
 ``` r
-source("intervention.R", echo = FALSE)
+k <- shedding_kernel(p$ww_t_peak, p$ww_t_end, p$ww_log10_vpeak)
+ggplot(data.frame(tau = seq_along(k) - 1, s = k), aes(tau, s)) +
+  geom_col(fill = "steelblue") +
+  geom_vline(xintercept = p$prodromal_period, linetype = 2) +
+  labs(x = "Days since prodrome onset", y = "Share of total shedding") +
+  theme_minimal()
 ```
 
-    Thank you for using epiworldR! Please consider citing it in your work.
-    You can find the citation information by running
-      citation("epiworldR")
+<div id="fig-kernel">
 
-    Using epiworldR in your research? Please cite it: citation("epiworldR")
+![](README_files/figure-commonmark/fig-kernel-1.png)
 
-To test this, we will use the `ModelSEIRCONN()` model, which is a simple
-SEIR model that assumes homogenous mixing and at a given contact rate.
-The model is calibrated so that R0 is approximately 3. We will run the
-model with 10,000 agents:
+Figure 1: Shedding profile, relative to prodrome onset. The dashed line
+marks rash onset.
 
-``` r
-r0 <- 3
-model <- ModelSEIRCONN(
-  name = "Flu with wastewater detection",
-  n = 10000,
-  prevalence = 10/10000,
-  contact_rate = 20,
-  transmission_rate = r0 * (1/7) / 20,
-  incubation_days = 7,
-  recovery_rate = 1/7
-)
-```
+</div>
 
-The implementation for this case is an example where we are assuming a
-high detection probability and a drastic reduction in the contact
-rate–so this is just for illustration and validation of the
-implementation.
+### Calibrating the triggers
 
-``` r
-# Adding the factory
-wastewater_detect_factory(
-  model,
-  detect_prob = .999,
-  crate_reduction = .9,
-  intervention_threshold = 150
-)
-```
+The clinical system sees a case at rash onset, but only after the
+reporting delay. WW sees it from the prodrome, but only after the lab
+turnaround. The WW threshold is calibrated on the baseline runs so that,
+at the median, both triggers fire after the same number of cases:
 
-We run the model usijng the `run()` function, for 200 days and with a
-seed of 133:
+- **Cases**: cumulative rash onsets on the rash day of the report that
+  crosses the case threshold.
+- **WW**: cumulative prodrome onsets on the collection day of the first
+  sample above the WW threshold.
 
-``` r
-run(model, ndays = 200, seed = 133)
-```
-
-    _________________________________________________________________________
-    Running the model...
-    ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| done.
-
-Verifying the reproductive number. Notice that the reproductive number
-is expected to be lower since we have the intervention in place (so this
-is not an R0 but an Re):
-
-``` r
-library(data.table)
-```
-
-    Warning: package 'data.table' was built under R version 4.5.2
-
-``` r
-rt <- get_reproductive_number(model) |>
-  as.data.table()
-
-rt[source_exposure_date == 0, mean(rt)]
-```
-
-    [1] 2.4
+Because runs with the same seed share their trajectory until the
+trigger, the scenarios are paired, and the lead time is the case trigger
+day minus the WW trigger day in the same outbreak.
 
 ## Results
 
-The following code shows how can we visualize the results of the
-simulation. The red vertical lines indicate the days when the wastewater
-sampling was done, and the intervention was triggered.
+Each scenario was simulated 400 times (`analysis/run-scenarios.R`) for
+two levels of vaccination coverage: none (R0 = 7 in a fully susceptible
+city) and 85% (effective R ≈ 1.2). Each simulation starts from a single
+introduction. Summaries only include runs in which the baseline produced
+an outbreak (50 or more infections), and the “Outbreaks” column gives
+their share. “Infected at trigger” and “Reported at trigger” are medians
+on the trigger day.
+
+<div id="tbl-summary">
+
+Table 1
+
+<div class="cell-output-display">
+
+| Coverage | Outbreaks (%) | Scenario | WW threshold (copies/mL) | Trigger day | Infected at trigger | Reported at trigger | Infections, median \[IQR\] | Averted vs baseline, mean | Lead of WW over cases (days) |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| 0% | 96 | baseline |  |  |  |  | 9,976 \[9,972, 9,979\] |  |  |
+| 0% | 96 | wastewater | 7.1 | 22 | 72 | 2 | 9,952 \[9,946, 9,956\] | 50 | 3 |
+| 0% | 96 | cases |  | 26 | 158 | 5 | 9,952 \[9,948, 9,957\] | 23 |  |
+| 85% | 40 | baseline |  |  |  |  | 891 \[836, 938\] |  |  |
+| 85% | 40 | wastewater | 15.8 | 46 | 18 | 4 | 282 \[51, 415\] | 611 | 4 |
+| 85% | 40 | cases |  | 50 | 20 | 5 | 242 \[64, 381\] | 630 |  |
+
+</div>
+
+</div>
 
 ``` r
-ans <- plot_incidence(model, plot = FALSE) |>
-  as.data.table()
-
-plot(
-  ans$Infected, type = "l",
-  main = "Infected over time",
-  xlab = "Days",
-  ylab = "Infected"
-  )
-
-# Creating this as a two column matrix
-# It should be filled by row, if the length is odd
-# then we complete it adding the last day as the duration
-# of the simulation (get_ndays(model))
-if (length(wastewater_counter) %% 2 == 1) {
-  wastewater_counter <- c(
-    wastewater_counter,
-    get_ndays(model)
-  )
-}
-
-wastewater_counter <- matrix(
-  wastewater_counter,
-  ncol = 2,
-  byrow = TRUE
-)
-
-wastewater_counter[, 2] <- -wastewater_counter[, 2] 
-
-# adding vertical bands that start and end
-# at the first row and first column of the matrix
-# respectively
-for (i in seq_len(nrow(wastewater_counter))) {
-  abline(
-    v = wastewater_counter[i, ],
-    col = "red",
-    lty = 2
-  )
-}
+curves <- rbindlist(lapply(res, `[[`, "curves"))
+curves[, coverage := paste0("Vaccination coverage: ", 100 * coverage, "%")]
+ggplot(curves, aes(day, new_inf, colour = scenario)) +
+  geom_line() +
+  facet_wrap(~coverage, scales = "free_y") +
+  labs(x = "Day", y = "New infections (mean)", colour = "Scenario") +
+  coord_cartesian(xlim = c(0, 200)) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
-![](README_files/figure-commonmark/unnamed-chunk-3-1.png)
+<div id="fig-curves">
 
-As expected, throghout the simulation, as the number of cases starts
-climing, the intervention is triggered and the contact rate is reduced.
+![](README_files/figure-commonmark/fig-curves-1.png)
+
+Figure 2: Mean daily new infections by scenario.
+
+</div>
+
+### Takeaways
+
+- **Without vaccination**, WW triggers a median of 3 days before the
+  case-based trigger. At that point about 72 people are infected and 2
+  cases have been reported. The case trigger fires at about 158 infected
+  and 5 reported. Both thresholds respond to the same number of cases
+  (about 11); WW simply sees them earlier. However, the school-age
+  intervention only lowers R from 7 to about 5.4, so neither trigger
+  stops a city-wide outbreak.
+- **With 85% coverage** (effective R ≈ 1.2), the same intervention
+  brings R just below one (≈ 0.95) and averts most infections. But the
+  outbreak grows slowly, so a lead of a few days barely changes the
+  number infected at the trigger. The differences between the WW and
+  case-based scenarios are within simulation noise.
+- The WW lead comes from shedding during the prodrome (about 4 days
+  before rash) plus the case-reporting delay, minus the lab turnaround.
+  Each extra day of turnaround removes about one day of lead. At 7 days
+  the advantage is gone (table below).
+- Earlier detection pays off most when the outbreak grows fast *and* the
+  triggered intervention is strong enough to bring R below one. With R0
+  = 7 and no vaccination, that would take broader measures than reducing
+  school-age contacts.
+
+### Lab turnaround time
+
+The value of earlier detection shrinks as the lab turnaround time grows.
+Here the WW threshold is fixed at its calibrated value:
+
+<div id="tbl-lab">
+
+Table 2
+
+<div class="cell-output-display">
+
+| Coverage | Lab turnaround (days) | Trigger day | Lead of WW over cases (days) | Infections averted, mean |
+|:---|---:|:---|:---|:---|
+| 0% | 0 | 19 | 6 | 49 |
+| 0% | 1 | 20 | 5 | 50 |
+| 0% | 3 | 22 | 3 | 50 |
+| 0% | 5 | 24 | 1 | 49 |
+| 0% | 7 | 26 | -1 | 50 |
+| 85% | 0 | 43 | 6 | 625 |
+| 85% | 1 | 44 | 6 | 627 |
+| 85% | 3 | 46 | 4 | 611 |
+| 85% | 5 | 48 | 2 | 602 |
+| 85% | 7 | 50 | 0 | 607 |
+
+</div>
+
+</div>
+
+## Reproducing
+
+``` r
+# Requires epiworldR >= 0.19.0 and measles >= 0.4.1
+# (https://github.com/UofUEpiBio/epiworldR, https://github.com/UofUEpiBio/measles),
+# multigroup.vaccine, data.table, ggplot2, and tinytest.
+source("analysis/run-scenarios.R")   # writes analysis/results.rds
+quarto::quarto_render("README.qmd")
+tinytest::run_test_dir("tests")
+```
+
+All parameters are set in `measles_ww_params()` (R/simulate.R) and can
+be changed, e.g., `measles_ww_params(R0 = 12, ww_lab_delay = 5)`.
+
+## References
+
+- CDC wwinference model: <https://github.com/CDCgov/ww-inference-model>
+- Corchis-Scott R. et al. Wastewater surveillance to track resurgent
+  measles outbreak, Ontario, Canada, 2025. *Emerg Infect Dis*
+  2026;32(10). <https://wwwnc.cdc.gov/eid/article/32/10/26-0092_article>
+- Temporal, spatial, and methodological considerations in evaluating the
+  viability of measles wastewater surveillance. *Sci Total
+  Environ* 2024.
+  <https://www.sciencedirect.com/science/article/abs/pii/S0048969724082998>
+- Measles RNA detection in wastewater solids: longitudinal monitoring at
+  a national scale.
+  <https://pubs.rsc.org/ew/article/12/7/2074/1223010/Measles-RNA-detection-in-wastewater-solids>
+- Genotype-specific detection of measles virus using wastewater
+  surveillance, Wisconsin, 2026. *MMWR* 75(27).
+  <https://www.cdc.gov/mmwr/volumes/75/wr/mm7527a1.htm>
+- Wastewater surveillance for measles virus during a measles outbreak,
+  Colorado, 2025.
+  <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12806976/>
+- Litvinova M. et al. Epistorm-Mix. medRxiv 2025.11.20.25340662.
+- Klinkenberg D., Nishiura H. The correlation between infectivity and
+  incubation period of measles. *J Theor Biol* 2011.
