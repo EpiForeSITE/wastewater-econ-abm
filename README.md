@@ -55,9 +55,7 @@ The shedding model follows the structure of the CDC
 [wwinference](https://github.com/CDCgov/ww-inference-model) model. The
 expected concentration on day $t$ is
 
-$$
-C(t) = \frac{1}{\alpha N} \sum_{\tau=0}^{\tau_{end}} s(\tau)\, G(t - \tau),
-$$
+$$C(t) = \frac{1}{\alpha N} \sum_{\tau=0}^{\tau_{end}} s(\tau)\, G(t - \tau),$$
 
 where $G(d)$ is the total number of genome copies shed by the people
 whose prodrome started on day $d$, $\alpha$ is the wastewater volume per
@@ -230,10 +228,25 @@ Table 2
 
 ## Reproducing
 
+The analysis needs epiworldR 0.19.0, measles 0.4.1, and
+multigroup.vaccine 0.1.1, which are installed from GitHub at pinned
+commits. The easiest way to get them is the dev container
+(`.devcontainer/Containerfile`), which also pins the R version and the
+CRAN snapshot:
+
+- **In the browser**: [![Open in GitHub
+  Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/EpiForeSITE/wastewater-econ-abm?devcontainer_path=.devcontainer/web/devcontainer.json)
+  (uses `.devcontainer/web/devcontainer.json`).
+- **Locally**: open the project in VS Code with the Dev Containers
+  extension (uses `.devcontainer/devcontainer.json`), or build the image
+  directly with
+  `docker build -f .devcontainer/Containerfile .devcontainer`.
+
+The image is built and tested by the `Dev container` GitHub Actions
+workflow, and published as `ghcr.io/epiforesite/wastewater-econ-abm-dev`
+from `main`. Inside the container:
+
 ``` r
-# Requires epiworldR >= 0.19.0 and measles >= 0.4.1
-# (https://github.com/UofUEpiBio/epiworldR, https://github.com/UofUEpiBio/measles),
-# multigroup.vaccine, data.table, ggplot2, and tinytest.
 source("analysis/run-scenarios.R")   # writes analysis/results.rds
 quarto::quarto_render("README.qmd")
 tinytest::run_test_dir("tests")
