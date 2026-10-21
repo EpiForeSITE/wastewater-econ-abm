@@ -42,6 +42,22 @@ expect_equal(
   vapply(tr, function(x) as.integer(x$t_cases), integer(1))
 )
 
+# Case detection probability: one uniform per case (common random numbers),
+# so WW triggers do not depend on it and a lower probability never makes the
+# case-based trigger fire earlier
+p_lo <- utils::modifyList(p, list(case_report_prob = 0.3))
+lo   <- run_scenarios(p_lo, setup, nsims = 20, scenarios = c("wastewater", "cases"))
+expect_equal(lo[scenario == "wastewater", trigger_day], w$trigger_day)
+hi_cases <- runs[scenario == "cases", trigger_day]
+lo_cases <- lo[scenario == "cases", trigger_day]
+expect_true(all(is.na(lo_cases[is.na(hi_cases)])))
+ok <- !is.na(lo_cases)
+expect_true(all(lo_cases[ok] >= hi_cases[ok]))
+expect_true(
+  sum(lo[scenario == "wastewater", reported]) <=
+    sum(runs[scenario == "wastewater", reported])
+)
+
 # Intervening never increases infections much on average
 expect_true(
   mean(runs[scenario == "wastewater", final_size]) <=

@@ -9,9 +9,12 @@ people and compares three scenarios:
 2.  **Wastewater (WW)**: wastewater is sampled three times a week,
     results are available after a lab turnaround time, and an
     intervention starts once a result reaches a threshold.
-3.  **Cases**: a fraction of rash cases are reported after a delay, and
-    the same intervention starts once cumulative reported cases reach a
-    threshold.
+3.  **Cases**: each case is detected during its rash period with
+    probability 70% and reported after a delay, and the same
+    intervention starts once cumulative reported cases reach a
+    threshold. Clinical detection of measles is far from perfect, so we
+    vary this probability in a sensitivity analysis (see [Case detection
+    probability](#case-detection-probability)).
 
 The intervention reduces the non-household contacts (school, work, and
 other settings) of school-age groups (5–19) by 80% for the rest of the
@@ -84,7 +87,8 @@ below the limit of detection (LOD).
 | LOD | 1 copies/mL (3 log10 copies/L) | Process LOD in STOTEN 2024 |
 | Sampling | 3 times a week | Ontario (Corchis-Scott et al. 2026) |
 | Lab turnaround | 3 days (sensitivity 0–7) | Assumption |
-| Cases reported | 50%, 3 days after rash | Assumption; Ontario estimated 5–10× under-reporting |
+| Case detection probability (during rash) | 70% (sensitivity 10, 30, 50, 70%) | Assumption; Ontario estimated 5–10× under-reporting |
+| Case reporting delay | 3 days after rash onset | Assumption |
 | Case trigger | 5 cumulative reported cases | Assumption |
 
 With these values, one person with median shedding, on their peak day,
@@ -122,6 +126,7 @@ at the median, both triggers fire after the same number of cases:
 - **WW**: cumulative prodrome onsets on the collection day of the first
   sample above the WW threshold.
 
+The calibration uses the reference case detection probability (70%).
 Because runs with the same seed share their trajectory until the
 trigger, the scenarios are paired, and the lead time is the case trigger
 day minus the WW trigger day in the same outbreak.
@@ -145,11 +150,11 @@ Table 1
 | Coverage | Outbreaks (%) | Scenario | WW threshold (copies/mL) | Trigger day | Infected at trigger | Reported at trigger | Infections, median \[IQR\] | Averted vs baseline, mean | Lead of WW over cases (days) |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 | 0% | 96 | baseline |  |  |  |  | 9,976 \[9,972, 9,979\] |  |  |
-| 0% | 96 | wastewater | 7.1 | 22 | 72 | 2 | 9,952 \[9,946, 9,956\] | 50 | 3 |
-| 0% | 96 | cases |  | 26 | 158 | 5 | 9,952 \[9,948, 9,957\] | 23 |  |
+| 0% | 96 | wastewater | 5.0 | 20 | 58 | 3 | 9,952 \[9,947, 9,956\] | 50 | 3 |
+| 0% | 96 | cases |  | 24 | 108 | 5 | 9,953 \[9,948, 9,957\] | 23 |  |
 | 85% | 40 | baseline |  |  |  |  | 891 \[836, 938\] |  |  |
-| 85% | 40 | wastewater | 15.8 | 46 | 18 | 4 | 282 \[51, 415\] | 611 | 4 |
-| 85% | 40 | cases |  | 50 | 20 | 5 | 242 \[64, 381\] | 630 |  |
+| 85% | 40 | wastewater | 12.6 | 42 | 16 | 5 | 250 \[49, 406\] | 627 | -1 |
+| 85% | 40 | cases |  | 44 | 16 | 5 | 276 \[56, 404\] | 623 |  |
 
 </div>
 
@@ -178,21 +183,24 @@ Figure 2: Mean daily new infections by scenario.
 ### Takeaways
 
 - **Without vaccination**, WW triggers a median of 3 days before the
-  case-based trigger. At that point about 72 people are infected and 2
-  cases have been reported. The case trigger fires at about 158 infected
+  case-based trigger. At that point about 58 people are infected and 3
+  cases have been reported. The case trigger fires at about 108 infected
   and 5 reported. Both thresholds respond to the same number of cases
-  (about 11); WW simply sees them earlier. However, the school-age
+  (about 8); WW simply sees them earlier. However, the school-age
   intervention only lowers R from 7 to about 5.4, so neither trigger
   stops a city-wide outbreak.
 - **With 85% coverage** (effective R ≈ 1.2), the same intervention
   brings R just below one (≈ 0.95) and averts most infections. But the
-  outbreak grows slowly, so a lead of a few days barely changes the
-  number infected at the trigger. The differences between the WW and
-  case-based scenarios are within simulation noise.
+  outbreak grows slowly, and at 70% case detection the WW lead is about
+  -1 days, so the differences between the WW and case-based scenarios
+  are within simulation noise. WW gains a clear advantage only when
+  clinical detection is lower (see [Case detection
+  probability](#case-detection-probability)).
 - The WW lead comes from shedding during the prodrome (about 4 days
   before rash) plus the case-reporting delay, minus the lab turnaround.
-  Each extra day of turnaround removes about one day of lead. At 7 days
-  the advantage is gone (table below).
+  Each extra day of turnaround removes about one day of lead (table
+  below). Without vaccination the advantage is gone at 7 days; with 85%
+  coverage it is already gone at the default 3 days.
 - Earlier detection pays off most when the outbreak grows fast *and* the
   triggered intervention is strong enough to bring R below one. With R0
   = 7 and no vaccination, that would take broader measures than reducing
@@ -211,20 +219,67 @@ Table 2
 
 | Coverage | Lab turnaround (days) | Trigger day | Lead of WW over cases (days) | Infections averted, mean |
 |:---|---:|:---|:---|:---|
-| 0% | 0 | 19 | 6 | 49 |
-| 0% | 1 | 20 | 5 | 50 |
-| 0% | 3 | 22 | 3 | 50 |
-| 0% | 5 | 24 | 1 | 49 |
-| 0% | 7 | 26 | -1 | 50 |
-| 85% | 0 | 43 | 6 | 625 |
-| 85% | 1 | 44 | 6 | 627 |
-| 85% | 3 | 46 | 4 | 611 |
-| 85% | 5 | 48 | 2 | 602 |
-| 85% | 7 | 50 | 0 | 607 |
+| 0% | 0 | 17 | 6 | 49 |
+| 0% | 1 | 18 | 5 | 50 |
+| 0% | 3 | 20 | 3 | 50 |
+| 0% | 5 | 22 | 1 | 49 |
+| 0% | 7 | 24 | -1 | 49 |
+| 85% | 0 | 39 | 2 | 651 |
+| 85% | 1 | 40 | 1 | 642 |
+| 85% | 3 | 42 | -1 | 627 |
+| 85% | 5 | 44 | -3 | 630 |
+| 85% | 7 | 46 | -5 | 616 |
 
 </div>
 
 </div>
+
+### Case detection probability
+
+Measles cases are hard to detect clinically: many are never seen by a
+clinician, tested, or reported. Here each case is detected during its
+rash period with a given probability, and the WW threshold stays at the
+value calibrated for 70% detection. WW does not depend on clinical
+detection, so only the case-based trigger changes. Case detection uses
+common random numbers (one draw per case), so the cases detected at a
+lower probability are a subset of those detected at a higher one, and
+the lead is paired with the same WW runs. “Triggered” is the share of
+outbreaks in which the case-based trigger fired; the lead is computed
+over outbreaks in which both triggers fired.
+
+<div id="tbl-report">
+
+Table 3
+
+<div class="cell-output-display">
+
+| Coverage | Case detection (%) | Triggered (%) | Trigger day | Infected at trigger | Lead of WW over cases (days) | Infections averted, mean |
+|:---|:---|:---|:---|:---|:---|:---|
+| 0% | 70 | 100 | 24 | 108 | 3 | 23 |
+| 0% | 50 | 100 | 26 | 155 | 4 | 23 |
+| 0% | 30 | 100 | 28 | 262 | 6 | 24 |
+| 0% | 10 | 100 | 32 | 758 | 11 | 22 |
+| 85% | 70 | 100 | 44 | 16 | -1 | 623 |
+| 85% | 50 | 100 | 50 | 20 | 7 | 610 |
+| 85% | 30 | 100 | 61 | 30 | 15 | 568 |
+| 85% | 10 | 100 | 93 | 73 | 44 | 457 |
+
+</div>
+
+</div>
+
+- Lower clinical detection delays the case-based trigger, so the WW lead
+  grows: without vaccination it goes from 3 days at 70% detection to 11
+  days at 10%.
+- With 85% coverage the outbreak grows slowly, so missed cases cost more
+  time: the lead goes from -1 days at 70% detection to 44 days at 10%,
+  and the infections averted by the case-based trigger fall from 623 to
+  457 (WW: 627).
+- Without vaccination the averted infections barely change, because the
+  intervention cannot stop the outbreak regardless of when it starts.
+
+The grid of detection probabilities is set by `report_probs` (and the
+reference value by `report_prob_ref`) in `analysis/run-scenarios.R`.
 
 ## Reproducing
 

@@ -25,8 +25,12 @@ people and compares three scenarios:
 2. **Wastewater (WW)**: wastewater is sampled three times a week, results are
    available after a lab turnaround time, and an intervention starts once a
    result reaches a threshold.
-3. **Cases**: a fraction of rash cases are reported after a delay, and the
-   same intervention starts once cumulative reported cases reach a threshold.
+3. **Cases**: each case is detected during its rash period with probability
+   `r 100 * p$case_report_prob`% and reported after a delay, and the same
+   intervention starts once cumulative reported cases reach a threshold.
+   Clinical detection of measles is far from perfect, so we vary this
+   probability in a sensitivity analysis (see
+   [Case detection probability](#case-detection-probability)).
 
 The intervention reduces the non-household contacts (school, work, and other
 settings) of school-age groups (5–19) by `r 100 * p$school_contact_reduction`%
@@ -99,7 +103,8 @@ the limit of detection (LOD).
 | LOD | `r p$ww_lod` copies/mL (3 log10 copies/L) | Process LOD in STOTEN 2024 |
 | Sampling | 3 times a week | Ontario (Corchis-Scott et al. 2026) |
 | Lab turnaround | `r p$ww_lab_delay` days (sensitivity 0–7) | Assumption |
-| Cases reported | `r 100 * p$case_report_prob`%, `r p$case_report_delay` days after rash | Assumption; Ontario estimated 5–10× under-reporting |
+| Case detection probability (during rash) | `r 100 * p$case_report_prob`% (sensitivity `r paste0(100 * sort(unique(res[[1]]$report_prob$case_report_prob)), collapse = ", ")`%) | Assumption; Ontario estimated 5–10× under-reporting |
+| Case reporting delay | `r p$case_report_delay` days after rash onset | Assumption |
 | Case trigger | `r p$trigger_cases` cumulative reported cases | Assumption |
 
 With these values, one person with median shedding, on their peak day, in a
@@ -132,7 +137,8 @@ triggers fire after the same number of cases:
 - **WW**: cumulative prodrome onsets on the collection day of the first sample
   above the WW threshold.
 
-Because runs with the same seed share their trajectory until the trigger, the
+The calibration uses the reference case detection probability
+(`r 100 * p$case_report_prob`%). Because runs with the same seed share their trajectory until the trigger, the
 scenarios are paired, and the lead time is the case trigger day minus the WW
 trigger day in the same outbreak.
 
@@ -223,13 +229,19 @@ r85 <- p$R0 * (1 - p85$prop_vaccinated * p85$vax_efficacy)
 - **With `r 100 * p85$prop_vaccinated`% coverage** (effective R ≈
   `r fmt(r85, 1)`), the same intervention brings R just below one (≈
   `r fmt(r85 * res[["0.85"]]$R_int / p$R0, 2)`) and averts most infections.
-  But the outbreak grows slowly, so a lead of a few days barely changes the
-  number infected at the trigger. The differences between the WW and
-  case-based scenarios are within simulation noise.
+  But the outbreak grows slowly, and at `r 100 * p$case_report_prob`%
+  case detection the WW lead is about
+  `r fmt(get("0.85", "wastewater", "lead_median"))` days, so the
+  differences between the WW and case-based scenarios are within
+  simulation noise. WW gains a clear advantage only when clinical
+  detection is lower (see
+  [Case detection probability](#case-detection-probability)).
 - The WW lead comes from shedding during the prodrome (about 4 days before
   rash) plus the case-reporting delay, minus the lab turnaround. Each extra
-  day of turnaround removes about one day of lead. At 7 days the advantage
-  is gone (table below).
+  day of turnaround removes about one day of lead (table below). Without
+  vaccination the advantage is gone at 7 days; with
+  `r 100 * p85$prop_vaccinated`% coverage it is already gone at the
+  default `r p$ww_lab_delay` days.
 - Earlier detection pays off most when the outbreak grows fast *and* the
   triggered intervention is strong enough to bring R below one. With
   R0 = `r p$R0` and no vaccination, that would take broader measures than
@@ -256,6 +268,67 @@ lab[, .(
   `Infections averted, mean`    = fmt(averted)
 )] |> knitr::kable()
 ```
+
+### Case detection probability
+
+Measles cases are hard to detect clinically: many are never seen by a
+clinician, tested, or reported. Here each case is detected during its rash
+period with a given probability, and the WW threshold stays at the value
+calibrated for `r 100 * p$case_report_prob`% detection. WW does not depend on
+clinical detection, so only the case-based trigger changes. Case detection
+uses common random numbers (one draw per case), so the cases detected at a
+lower probability are a subset of those detected at a higher one, and the
+lead is paired with the same WW runs. "Triggered" is the share of outbreaks
+in which the case-based trigger fired; the lead is computed over outbreaks
+in which both triggers fired.
+
+```{r}
+#| label: tbl-report
+#| echo: false
+rp <- rbindlist(lapply(names(res), function(cov) {
+  x <- copy(res[[cov]]$report_prob)
+  x[, coverage := paste0(100 * as.numeric(cov), "%")]
+  x
+}))
+setorder(rp, coverage, -case_report_prob)
+rp[, .(
+  Coverage                       = coverage,
+  `Case detection (%)`           = fmt(100 * case_report_prob),
+  `Triggered (%)`                = fmt(pct_trigger),
+  `Trigger day`                  = fmt(trigger_day),
+  `Infected at trigger`          = fmt(infected_at_trigger),
+  `Lead of WW over cases (days)` = fmt(lead_median),
+  `Infections averted, mean`     = fmt(averted)
+)] |> knitr::kable()
+```
+
+```{r}
+#| label: report-values
+#| include: false
+rget <- function(cov, prob, v)
+  res[[cov]]$report_prob[case_report_prob == prob][[v]]
+rmin <- min(res[["0"]]$report_prob$case_report_prob)
+```
+
+- Lower clinical detection delays the case-based trigger, so the WW lead
+  grows: without vaccination it goes from
+  `r fmt(rget("0", p$case_report_prob, "lead_median"))` days at
+  `r 100 * p$case_report_prob`% detection to
+  `r fmt(rget("0", rmin, "lead_median"))` days at `r 100 * rmin`%.
+- With `r 100 * p85$prop_vaccinated`% coverage the outbreak grows slowly,
+  so missed cases cost more time: the lead goes from
+  `r fmt(rget("0.85", p$case_report_prob, "lead_median"))` days at
+  `r 100 * p$case_report_prob`% detection to
+  `r fmt(rget("0.85", rmin, "lead_median"))` days at `r 100 * rmin`%, and
+  the infections averted by the case-based trigger fall from
+  `r fmt(rget("0.85", p$case_report_prob, "averted"))` to
+  `r fmt(rget("0.85", rmin, "averted"))` (WW:
+  `r fmt(get("0.85", "wastewater", "averted"))`).
+- Without vaccination the averted infections barely change, because the
+  intervention cannot stop the outbreak regardless of when it starts.
+
+The grid of detection probabilities is set by `report_probs` (and the
+reference value by `report_prob_ref`) in `analysis/run-scenarios.R`.
 
 ## Reproducing
 

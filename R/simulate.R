@@ -5,7 +5,8 @@
 #  - "wastewater": WW samples are collected on sampling days and become
 #                  available `ww_lab_delay` days later. The intervention starts
 #                  the first time a result is at or above `trigger_ww`.
-#  - "cases":      a fraction `case_report_prob` of rash onsets are reported
+#  - "cases":      each case is detected during its rash period with
+#                  probability `case_report_prob` (default 70%) and reported
 #                  `case_report_delay` days after rash onset. The intervention
 #                  starts when cumulative reports reach `trigger_cases`.
 #
@@ -49,8 +50,9 @@ measles_ww_params <- function(...) {
     ww_lod                      = 1,
     ww_sampling_days            = c(1, 3, 5),
     ww_lab_delay                = 3,
-    # Clinical surveillance
-    case_report_prob            = 0.5,
+    # Clinical surveillance: probability that a case is detected (and
+    # reported) during its rash period. Varied in a sensitivity analysis.
+    case_report_prob            = 0.7,
     case_report_delay           = 3,
     # Triggers and intervention
     trigger_cases               = 5,
@@ -234,10 +236,16 @@ add_surveillance <- function(m, p, setup, scenario, state) {
     state$cum_prod[t] <- cum[["prod"]]
     state$cum_rash[t] <- cum[["rash"]]
 
-    # Clinical surveillance: reports arrive after the reporting delay
+    # Clinical surveillance: each new rash case is detected with probability
+    # case_report_prob, and reports arrive after the reporting delay. One
+    # uniform is drawn per case (instead of a single binomial draw) so that
+    # the number of random draws does not depend on case_report_prob. This
+    # keeps the WW draws identical across detection probabilities, and the
+    # cases detected at a lower probability are a subset of those detected
+    # at a higher one (common random numbers for the sensitivity analysis).
     r <- t + p$case_report_delay
     state$reported[r] <- state$reported[r] +
-      stats::rbinom(1, new[["rash"]], p$case_report_prob)
+      sum(stats::runif(new[["rash"]]) < p$case_report_prob)
 
     # Shedding: individual total genome copies are log-normal
     state$cohort_g[t] <- sum(stats::rlnorm(new[["prod"]], meanlog, sdlog))
