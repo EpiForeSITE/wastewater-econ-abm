@@ -287,7 +287,10 @@ add_surveillance <- function(m, p, setup, scenario, state) {
     epiworldR::globalevent_fun(fun, name = "Surveillance", day = -99)
   )
 
-  invisible(m)
+  # The model holds `fun`, whose environment is this frame, so the frame must
+  # not reference the model; otherwise the model can never be freed
+  rm(m)
+  invisible(NULL)
 
 }
 
@@ -300,7 +303,9 @@ add_surveillance <- function(m, p, setup, scenario, state) {
 simulate_once <- function(p, setup, scenario, seed) {
 
   m     <- build_model(p, setup)
-  state <- new.env()
+  # Empty parent: the default (this frame) would let the surveillance event
+  # reach `m` and keep the model alive (see add_surveillance())
+  state <- new.env(parent = emptyenv())
   add_surveillance(m, p, setup, scenario, state)
 
   set.seed(seed)

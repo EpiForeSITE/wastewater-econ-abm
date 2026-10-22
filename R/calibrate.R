@@ -11,6 +11,10 @@
 #    sample at or above the WW threshold (trigger day - ww_lab_delay);
 #
 # and pick the WW threshold whose median matches the case-based median.
+# Both medians are taken over the same runs: those where the case trigger
+# fires. A run where WW never crosses the threshold counts as WW never
+# seeing the outbreak (`Inf`), so thresholds that miss outbreaks are
+# penalized instead of being judged only on the runs they detect.
 # Because the comparison uses the collection day, the calibrated threshold
 # does not depend on `ww_lab_delay`.
 
@@ -45,7 +49,9 @@ offline_triggers <- function(d, p, trigger_ww = p$trigger_ww) {
 #' @param p Parameters.
 #' @param grid Candidate thresholds (copies/mL); values below the LOD are
 #' dropped.
-#' @return A list with the selected threshold and the calibration table.
+#' @return A list with the selected threshold, the target, the number of runs
+#' used (those where the case trigger fires), and the calibration table, which
+#' also gives the percentage of those runs where WW crosses each threshold.
 calibrate_ww_threshold <- function(
     baseline,
     p,
@@ -59,17 +65,25 @@ calibrate_ww_threshold <- function(
     function(d) offline_triggers(d, p)$seen_cases,
     numeric(1)
   )
-  target <- stats::median(seen_cases, na.rm = TRUE)
+  eligible <- !is.na(seen_cases)
+  if (!any(eligible))
+    stop("The case trigger never fires in the baseline runs.")
+  target <- stats::median(seen_cases[eligible])
+
+  seen_ww <- vapply(grid, function(thr) {
+    vapply(
+      baseline$daily[eligible],
+      function(d) offline_triggers(d, p, thr)$seen_ww,
+      numeric(1)
+    )
+  }, numeric(sum(eligible)))
+  seen_ww <- matrix(seen_ww, ncol = length(grid))
+  seen_ww[is.na(seen_ww)] <- Inf
 
   tab <- data.frame(
-    threshold = grid,
-    seen_ww   = vapply(grid, function(thr) {
-      stats::median(vapply(
-        baseline$daily,
-        function(d) offline_triggers(d, p, thr)$seen_ww,
-        numeric(1)
-      ), na.rm = TRUE)
-    }, numeric(1))
+    threshold   = grid,
+    seen_ww     = apply(seen_ww, 2, stats::median),
+    pct_trigger = 100 * colMeans(is.finite(seen_ww))
   )
 
   best <- which.min(abs(tab$seen_ww - target))
@@ -77,6 +91,7 @@ calibrate_ww_threshold <- function(
   list(
     threshold = tab$threshold[best],
     target    = target,
+    n_runs    = sum(eligible),
     table     = tab
   )
 
