@@ -1,0 +1,32 @@
+// Browser-ready dev container (GitHub Codespaces). It builds the same pinned
+// image as the local configuration (.devcontainer/Containerfile) but does not
+// rely on bind mounts from the host.
+{
+	"name": "Wastewater Econ (web)",
+	"build": {
+		"dockerfile": "../Containerfile",
+		"context": ".."
+	},
+	"hostRequirements": {
+		"cpus": 4,
+		"memory": "8gb"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"reditorsupport.r",
+				"rdebugger.r-debugger",
+				"quarto.quarto",
+				"github.vscode-github-actions"
+			],
+			"settings": {
+				"r.plot.useHttpgd": true,
+				"r.alwaysUseActiveTerminal": true
+			}
+		},
+		"codespaces": {
+			"openFiles": ["README.qmd"]
+		}
+	},
+	"remoteUser": "root"
+}

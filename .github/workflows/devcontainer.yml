@@ -1,0 +1,39 @@
+# Builds the pinned dev container, runs the tests inside it, and (on main)
+# publishes the image to the GitHub Container Registry.
+name: Dev container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build container and run tests
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: .devcontainer/web/devcontainer.json
+          imageName: ghcr.io/epiforesite/wastewater-econ-abm-dev
+          cacheFrom: ghcr.io/epiforesite/wastewater-econ-abm-dev
+          push: filter
+          refFilterForPush: refs/heads/main
+          eventFilterForPush: push
+          runCmd: >-
+            Rscript -e 'r <- tinytest::run_test_dir("tests"); print(r);
+            if (!all(as.logical(r))) quit(status = 1)'

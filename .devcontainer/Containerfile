@@ -1,20 +1,42 @@
-FROM ghcr.io/rocker-org/devcontainer/r-ver:4.6
+# r-ver:4.6 (R 4.6.1, Ubuntu noble), pinned by its multi-arch digest
+FROM ghcr.io/rocker-org/devcontainer/r-ver:4.6@sha256:1660ee0beba698f16c84b9bdeba7014c09c9e9588ee307174f6b9f53a6276c4f
 
 # Architecture-specific variable (built in Docker BuildKit)
 ARG TARGETARCH
 
-# Install quarto-cli and the orange-book extension
+# Pinned versions. CRAN packages come from a dated Posit Package Manager
+# snapshot; the GitHub packages are pinned to the commits used for the
+# analysis (epiworldR 0.19.0, measles 0.4.1, multigroup.vaccine 0.1.1).
+ARG CRAN_SNAPSHOT=2026-10-20
+ARG EPIWORLDR_REF=5a138cfdd864e4e5b7a0c5358ca6705782e8cba4
+ARG MEASLES_REF=d1e87fed204ebe820620759fa1b85cdb9d2e0b03
+ARG MULTIGROUP_REF=ddd9201f28b9908c033542f6a2445b84619af1c7
+
+RUN echo "options(repos = c(CRAN = 'https://p3m.dev/cran/__linux__/$(lsb_release -cs)/${CRAN_SNAPSHOT}'))" \
+  >> "$(R RHOME)/etc/Rprofile.site"
+
+# Install quarto-cli
 RUN wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.9.35/quarto-1.9.35-linux-${TARGETARCH}.deb && \
     dpkg -i quarto-1.9.35-linux-${TARGETARCH}.deb && \
     rm quarto-1.9.35-linux-${TARGETARCH}.deb
 
-# Adding R packages
-RUN install2.r --error cpp11 roxygen2 tinytest data.table netplot \
-  devtools decor DiagrammeR quarto
-
 RUN apt-get update && apt-get install --no-install-recommends -y valgrind gdb \
-  libglpk-dev
+  libglpk-dev pre-commit && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install --no-install-recommends -y pre-commit
+# Adding R packages
+RUN install2.r --error --skipinstalled cpp11 roxygen2 tinytest data.table \
+  netplot devtools remotes decor DiagrammeR quarto ggplot2 knitr rmarkdown \
+  socialmixr httpgd languageserver
+
+# Measles models and census helpers, pinned to specific commits
+RUN Rscript -e "remotes::install_github('UofUEpiBio/epiworldR@${EPIWORLDR_REF}', upgrade = 'never')" && \
+    Rscript -e "remotes::install_github('UofUEpiBio/measles@${MEASLES_REF}', upgrade = 'never')" && \
+    Rscript -e "remotes::install_github('EpiForeSITE/multigroup-vaccine@${MULTIGROUP_REF}', upgrade = 'never')"
+
+# Fail the build if the versions do not match what the analysis expects
+RUN Rscript -e "stopifnot( \
+  packageVersion('epiworldR') == '0.19.0', \
+  packageVersion('measles') == '0.4.1', \
+  packageVersion('multigroup.vaccine') == '0.1.1')"
 
 CMD ["bash"]
