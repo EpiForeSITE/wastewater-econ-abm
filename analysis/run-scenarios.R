@@ -7,7 +7,14 @@ for (f in list.files("R", full.names = TRUE)) source(f)
 nsims        <- 400
 cores        <- max(1, parallel::detectCores() - 1)
 coverages    <- c(0, 0.85)
-lab_delays   <- c(0, 1, 3, 5, 7)
+lab_delays   <- c(0, 1, 3, 5, 7, 10)
+# WW sampling schedules (days of the week, t %% 7)
+sampling_schedules <- list(
+  "1" = 1,
+  "2" = c(1, 4),
+  "3" = c(1, 3, 5),
+  "5" = 1:5
+)
 # Probability that a case is detected during its rash period. The reference
 # value is used for the main scenarios and to calibrate the WW threshold;
 # the sensitivity analysis varies it with the WW threshold held fixed.
@@ -19,21 +26,34 @@ outbreak_min <- 50 # baseline infections for a run to count as an outbreak
 # of each run. When given, the lead is the run's own trigger day minus
 # `t_ww`; this is used for case-based runs whose detection probability
 # differs from the one used to generate the baseline reports.
-summarise_runs <- function(runs, baseline, p, ww_days = NULL) {
+# `case_days` (optional): data.table with `sim` and `t_cases`, the case-based
+# trigger day of each run. When given, the lead is `t_cases` minus the run's
+# own trigger day; this is used for WW runs whose sampling schedule differs
+# from the one used to generate the baseline WW series.
+summarise_runs <- function(
+    runs,
+    baseline,
+    p,
+    ww_days   = NULL,
+    case_days = NULL
+) {
 
   base <- baseline[, .(sim, base_final = final_size, base_daily = daily)]
   runs <- merge(runs, base, by = "sim")
 
   # Paired lead time: case-based trigger day minus WW trigger day, both
   # computed on the shared baseline trajectory
-  if (is.null(ww_days)) {
+  if (!is.null(ww_days)) {
+    runs <- merge(runs, ww_days, by = "sim")
+    runs[, lead := as.numeric(trigger_day) - as.numeric(t_ww)]
+  } else if (!is.null(case_days)) {
+    runs <- merge(runs, case_days, by = "sim")
+    runs[, lead := as.numeric(t_cases) - as.numeric(trigger_day)]
+  } else {
     runs[, lead := vapply(base_daily, function(d) {
       tr <- offline_triggers(d, p)
       tr$t_cases - tr$t_ww
     }, numeric(1))]
-  } else {
-    runs <- merge(runs, ww_days, by = "sim")
-    runs[, lead := as.numeric(trigger_day) - as.numeric(t_ww)]
   }
 
   at_trigger <- function(d, t, f) if (is.na(t)) NA_real_ else f(d, t)
@@ -115,6 +135,22 @@ for (cov in coverages) {
     s[, ww_lab_delay := ld][]
   }))
 
+  # Sensitivity: WW sampling frequency (threshold kept fixed). The WW
+  # measurement error is drawn every day (see add_surveillance()), so the
+  # schedules share their draws and differ only in which days are sampled.
+  # The baseline WW series uses the default schedule, so the lead is paired
+  # with the case-based trigger of the main runs instead.
+  case_days <- triggered[scenario == "cases", .(sim, t_cases = trigger_day)]
+  sampling <- rbindlist(lapply(names(sampling_schedules), function(k) {
+    ps  <- utils::modifyList(
+      p,
+      list(ww_sampling_days = sampling_schedules[[k]])
+    )
+    out <- run_scenarios(ps, setup, nsims, "wastewater", cores = cores)
+    s   <- summarise_runs(out, baseline, ps, case_days = case_days)
+    s[, samples_per_week := as.integer(k)][]
+  }))
+
   # Sensitivity: probability of detecting a case during the rash period.
   # The WW threshold stays at its calibrated value, so only the case-based
   # trigger changes. Case detection uses common random numbers (see
@@ -156,6 +192,7 @@ for (cov in coverages) {
       p
     ),
     lab_delay   = lab,
+    sampling    = sampling,
     report_prob = report,
     diagnostics = diag,
     curves      = mean_curve(rbind(baseline, triggered), cov)

@@ -64,6 +64,27 @@ expect_true(
     mean(b$final_size)
 )
 
+# WW sampling schedule: the measurement error is drawn every day, so
+# schedules share the shedding and the measurements on their common days
+p_s5 <- utils::modifyList(p, list(ww_sampling_days = 1:5))
+s3   <- simulate_once(p, setup, "baseline", 1001)$daily
+s5   <- simulate_once(p_s5, setup, "baseline", 1001)$daily
+expect_equal(s5$ww_true, s3$ww_true)
+common <- (s3$day %% 7) %in% p$ww_sampling_days
+expect_equal(s5$ww_obs[common], s3$ww_obs[common])
+expect_true(sum(!is.na(s5$ww_obs)) > sum(!is.na(s3$ww_obs)))
+
+# The parameter table documents every parameter, with its actual default
+pars <- ww_parameters()
+expect_equal(sort(pars$r_argument), sort(names(measles_ww_params())))
+for (i in seq_len(nrow(pars)))
+  expect_equal(
+    eval(parse(text = pars$default[i])),
+    measles_ww_params()[[pars$r_argument[i]]],
+    info = pars$r_argument[i]
+  )
+expect_true(all(pars$citation != ""))
+
 # Calibration returns a threshold at or above the LOD
 cal <- calibrate_ww_threshold(b, p)
 expect_true(cal$threshold >= p$ww_lod)

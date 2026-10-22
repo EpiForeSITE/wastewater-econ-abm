@@ -258,8 +258,12 @@ add_surveillance <- function(m, p, setup, scenario, state) {
     )
     state$ww_true[t] <- conc
 
+    # The measurement error is drawn every day, and used only on sampling
+    # days, so the number of random draws does not depend on the sampling
+    # schedule (common random numbers across schedules)
+    eps <- stats::rnorm(1, 0, p$ww_sigma)
     if ((t %% 7) %in% p$ww_sampling_days) {
-      obs <- conc * exp(stats::rnorm(1, 0, p$ww_sigma))
+      obs <- conc * exp(eps)
       state$ww_obs[t] <- if (obs >= p$ww_lod) obs else 0
     }
 

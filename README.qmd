@@ -92,22 +92,7 @@ changes from the COVID model:
 Measurements are log-normal around $C(t)$ and recorded as non-detects below
 the limit of detection (LOD).
 
-| Parameter | Value | Source |
-|---|---|---|
-| Peak shedding, days after prodrome onset ($\tau_{peak}$) | `r p$ww_t_peak` (rash onset) | Prodromal and rash-onset shedding (Corchis-Scott et al. 2026) |
-| End of shedding ($\tau_{end}$) | `r p$ww_t_end` (≈14 days after rash) | Urine RNA up to 14 days (Corchis-Scott et al. 2026); RT-PCR positive up to 10+ days after rash (CDC) |
-| Peak-to-tail ratio (log10) | `r p$ww_log10_vpeak` | Assumption (shape only; profile is normalized) |
-| Copies per infection, log10 mean (SD) | `r p$ww_log10_g_mean` (`r p$ww_log10_g_sd`) | ≈10^8.7 copies/infection/day over ≈2 weeks (STOTEN 2024 model); median 1.4×10^11 copies/person/day, 4 orders of magnitude range (Corchis-Scott et al. 2026) |
-| Wastewater per person per day ($\alpha$) | `r fmt(p$ww_alpha)` mL | wwinference (Ortiz 2024) |
-| Measurement SD (log scale) | `r p$ww_sigma` | Assumption |
-| LOD | `r p$ww_lod` copies/mL (3 log10 copies/L) | Process LOD in STOTEN 2024 |
-| Sampling | 3 times a week | Ontario (Corchis-Scott et al. 2026) |
-| Lab turnaround | `r p$ww_lab_delay` days (sensitivity 0–7) | Assumption |
-| Case detection probability (during rash) | `r 100 * p$case_report_prob`% (sensitivity `r paste0(100 * sort(unique(res[[1]]$report_prob$case_report_prob)), collapse = ", ")`%) | Assumption; Ontario estimated 5–10× under-reporting |
-| Case reporting delay | `r p$case_report_delay` days after rash onset | Assumption |
-| Case trigger | `r p$trigger_cases` cumulative reported cases | Assumption |
-
-With these values, one person with median shedding, on their peak day, in a
+See [Parameters](#parameters) for the values and their sources. With these values, one person with median shedding, on their peak day, in a
 city of `r fmt(p$n)`
 produces a concentration near the LOD, roughly in line with the
 STOTEN 2024 estimate that about 8 cases per 10,000 people are needed for 50%
@@ -123,6 +108,22 @@ ggplot(data.frame(tau = seq_along(k) - 1, s = k), aes(tau, s)) +
   geom_vline(xintercept = p$prodromal_period, linetype = 2) +
   labs(x = "Days since prodrome onset", y = "Share of total shedding") +
   theme_minimal()
+```
+
+### Parameters
+
+The defaults of `measles_ww_params()`, with their sources, following the
+format of the parameter table in the measles package
+(`measles::measles_parameters()`). The table is stored in
+[data/parameters.csv](data/parameters.csv), and the tests check that it
+matches the defaults in the code. Values marked "Assumption" have no direct
+source; the notes say what informed them and how they differ from the
+measles package defaults.
+
+```{r}
+#| label: tbl-params
+#| echo: false
+knitr::kable(format_ww_parameters(ww_parameters()))
 ```
 
 ### Calibrating the triggers
@@ -215,6 +216,8 @@ ggplot(curves, aes(day, new_inf, colour = scenario)) +
 get <- function(cov, sc, v) res[[cov]]$summary[scenario == sc][[v]]
 p85 <- res[["0.85"]]$params
 r85 <- p$R0 * (1 - p85$prop_vaccinated * p85$vax_efficacy)
+sget <- function(cov, k, v)
+  res[[cov]]$sampling[samples_per_week == k][[v]]
 ```
 
 ### Takeaways
@@ -248,6 +251,22 @@ r85 <- p$R0 * (1 - p85$prop_vaccinated * p85$vax_efficacy)
   days without vaccination and
   `r fmt(res[["0.85"]]$lab_delay[ww_lab_delay == 7, lead_median])` days with
   `r 100 * p85$prop_vaccinated`% coverage (table below).
+- Without vaccination, sampling once a week instead of 3 times a week cuts
+  the lead from `r fmt(sget("0", 3, "lead_median"))` to
+  `r fmt(sget("0", 1, "lead_median"))` days, about what the extra days
+  between samples would predict. With `r 100 * p85$prop_vaccinated`%
+  coverage it costs far more, likely because the slowly growing signal
+  stays near the threshold for weeks, so each missed sampling day is a
+  missed chance to cross it. The WW
+  trigger moves from day `r fmt(sget("0.85", 3, "trigger_day"))` to day
+  `r fmt(sget("0.85", 1, "trigger_day"))`, and the lead from
+  `r fmt(sget("0.85", 3, "lead_median"))` to
+  `r fmt(sget("0.85", 1, "lead_median"))` days. Sampling twice a week, as
+  in Utah, gives a median lead, in days, of
+  `r fmt(sget("0", 2, "lead_median"))` without vaccination and
+  `r fmt(sget("0.85", 2, "lead_median"))` with
+  `r 100 * p85$prop_vaccinated`% coverage (see
+  [Sampling frequency](#sampling-frequency)).
 - Earlier detection pays off most when the outbreak grows fast *and* the
   triggered intervention is strong enough to bring R below one. With
   R0 = `r p$R0` and no vaccination, that would take broader measures than
@@ -255,8 +274,14 @@ r85 <- p$R0 * (1 - p85$prop_vaccinated * p85$vax_efficacy)
 
 ### Lab turnaround time
 
-The value of earlier detection shrinks as the lab turnaround time grows. Here
-the WW threshold is fixed at its calibrated value:
+The value of earlier detection shrinks as the lab turnaround time grows. The
+default of `r p$ww_lab_delay` days is an assumption. It matches what Utah
+reports: in the 2020 pilot, samples reached the Utah Public Health Laboratory
+within 24 hours and results took 48 hours, and in the July 2025 Provo
+detection, DHHS was notified 4 days after collection. Other programs are
+slower (results within 10 days in New Mexico), and measles assays may take
+longer than the COVID-19 assays of the Utah pilot, so the range goes up to
+10 days. The WW threshold is fixed at its calibrated value:
 
 ```{r}
 #| label: tbl-lab
@@ -272,6 +297,35 @@ lab[, .(
   `Trigger day`                 = fmt(trigger_day),
   `Lead of WW over cases (days)` = fmt(lead_median),
   `Infections averted, mean`    = fmt(averted)
+)] |> knitr::kable()
+```
+
+### Sampling frequency
+
+WW is sampled 3 times a week by default, as in Ontario; Utah samples measles
+twice a week. Less frequent sampling delays the first sample above the
+threshold and gives fewer chances to catch it. The WW measurement error is
+drawn every day, so the schedules share their measurements and differ only in
+which days are sampled. The threshold is fixed at its calibrated value, and
+the lead is measured against the case-based trigger in the same runs:
+
+```{r}
+#| label: tbl-sampling
+#| echo: false
+smp <- rbindlist(lapply(names(res), function(cov) {
+  x <- copy(res[[cov]]$sampling)
+  x[, coverage := paste0(100 * as.numeric(cov), "%")]
+  x
+}))
+setorder(smp, coverage, samples_per_week)
+smp[, .(
+  Coverage                       = coverage,
+  `Samples per week`             = samples_per_week,
+  `Triggered (%)`                = fmt(pct_trigger),
+  `Trigger day`                  = fmt(trigger_day),
+  `Infected at trigger`          = fmt(infected_at_trigger),
+  `Lead of WW over cases (days)` = fmt(lead_median),
+  `Infections averted, mean`     = fmt(averted)
 )] |> knitr::kable()
 ```
 
@@ -378,6 +432,23 @@ changed, e.g., `measles_ww_params(R0 = 12, ww_lab_delay = 5)`.
   Wisconsin, 2026. *MMWR* 75(27). <https://www.cdc.gov/mmwr/volumes/75/wr/mm7527a1.htm>
 - Wastewater surveillance for measles virus during a measles outbreak,
   Colorado, 2025. <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12806976/>
+- Utah DHHS. Measles Disease Plan (updated March 26, 2026).
+  <https://epi.utah.gov/wp-content/uploads/Measles-disease-plan.pdf>
+- Utah DHHS. Measles has been detected in Provo area wastewater (July 2025).
+  <https://dhhs.utah.gov/featured-news/measles-has-been-detected-in-provo-area-wastewater/>
+- Why Utah Public Health Lab uses sewage to track measles. *Deseret News*,
+  March 21, 2026.
+  <https://www.deseret.com/lifestyle/2026/03/21/measles-outbreak-utah-public-health-lab-wastewater-surveillance/>
+- Use of wastewater surveillance in the coordinated response to COVID-19 in
+  Utah (pilot report, August 2020).
+  <https://www.acwa-us.org/wp-content/uploads/2020/08/COVID-Surv._Utah_wastewater_virus_pilot_Aug.pdf>
+- CDC NWSS sampling sites, time from collection to testing.
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC11103741/>
+- Measles wild-type virus detection through wastewater surveillance in
+  Sandoval County, New Mexico. <https://pmc.ncbi.nlm.nih.gov/articles/PMC13150633/>
+- Guerra F. M. et al. The basic reproduction number (R0) of measles: a
+  systematic review. *Lancet Infect Dis* 2017;17(12):e420-e428.
+  <https://doi.org/10.1016/S1473-3099(17)30307-9>
 - Litvinova M. et al. Epistorm-Mix. medRxiv 2025.11.20.25340662.
 - Klinkenberg D., Nishiura H. The correlation between infectivity and
   incubation period of measles. *J Theor Biol* 2011.
