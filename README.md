@@ -122,6 +122,11 @@ at the median, both triggers fire after the same number of cases:
 - **WW**: cumulative prodrome onsets on the collection day of the first
   sample above the WW threshold.
 
+Both medians are taken over the same runs, those where the case trigger
+fires. If WW never crosses the threshold in one of those runs, it counts
+as WW never seeing the outbreak, so a threshold cannot look well
+calibrated just by missing the outbreaks it would detect late.
+
 Because runs with the same seed share their trajectory until the
 trigger, the scenarios are paired, and the lead time is the case trigger
 day minus the WW trigger day in the same outbreak.
@@ -148,7 +153,7 @@ Table 1
 | 0% | 96 | wastewater | 7.1 | 22 | 72 | 2 | 9,952 \[9,946, 9,956\] | 50 | 3 |
 | 0% | 96 | cases |  | 26 | 158 | 5 | 9,952 \[9,948, 9,957\] | 23 |  |
 | 85% | 40 | baseline |  |  |  |  | 891 \[836, 938\] |  |  |
-| 85% | 40 | wastewater | 15.8 | 46 | 18 | 4 | 282 \[51, 415\] | 611 | 4 |
+| 85% | 40 | wastewater | 12.6 | 46 | 15 | 3 | 270 \[49, 405\] | 622 | 6 |
 | 85% | 40 | cases |  | 50 | 20 | 5 | 242 \[64, 381\] | 630 |  |
 
 </div>
@@ -191,8 +196,9 @@ Figure 2: Mean daily new infections by scenario.
   case-based scenarios are within simulation noise.
 - The WW lead comes from shedding during the prodrome (about 4 days
   before rash) plus the case-reporting delay, minus the lab turnaround.
-  Each extra day of turnaround removes about one day of lead. At 7 days
-  the advantage is gone (table below).
+  Each extra day of turnaround removes about one day of lead. With a
+  7-day turnaround, the median lead is -1 days without vaccination and 2
+  days with 85% coverage (table below).
 - Earlier detection pays off most when the outbreak grows fast *and* the
   triggered intervention is strong enough to bring R below one. With R0
   = 7 and no vaccination, that would take broader measures than reducing
@@ -216,11 +222,11 @@ Table 2
 | 0% | 3 | 22 | 3 | 50 |
 | 0% | 5 | 24 | 1 | 49 |
 | 0% | 7 | 26 | -1 | 50 |
-| 85% | 0 | 43 | 6 | 625 |
-| 85% | 1 | 44 | 6 | 627 |
-| 85% | 3 | 46 | 4 | 611 |
-| 85% | 5 | 48 | 2 | 602 |
-| 85% | 7 | 50 | 0 | 607 |
+| 85% | 0 | 43 | 9 | 637 |
+| 85% | 1 | 44 | 8 | 635 |
+| 85% | 3 | 46 | 6 | 622 |
+| 85% | 5 | 48 | 4 | 619 |
+| 85% | 7 | 50 | 2 | 622 |
 
 </div>
 

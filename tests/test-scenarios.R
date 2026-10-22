@@ -52,4 +52,32 @@ expect_true(
 cal <- calibrate_ww_threshold(b, p)
 expect_true(cal$threshold >= p$ww_lod)
 
+# Calibration compares the same runs: WW non-detections among the runs where
+# the case trigger fires count as never seen, so a threshold that misses
+# most of them cannot match the target
+n_cases <- sum(!is.na(vapply(tr, function(x) x$seen_cases, numeric(1))))
+expect_equal(cal$n_runs, n_cases)
+expect_true(all(diff(cal$table$pct_trigger) <= 0))
+expect_true(all(is.infinite(cal$table$seen_ww[cal$table$pct_trigger < 50])))
+expect_true(cal$table$pct_trigger[cal$table$threshold == cal$threshold] >= 50)
+
+# Simulated models are freed: the surveillance event must not keep a
+# reference to its model (a leak of ~30 MB per run otherwise)
+freed <- 0
+sentinel_model <- function(p, setup) {
+  m <- build_model(p, setup)
+  e <- new.env()
+  reg.finalizer(e, function(e) freed <<- freed + 1)
+  attr(m, "sentinel") <- e
+  m
+}
+so <- simulate_once
+environment(so) <- list2env(
+  list(build_model = sentinel_model),
+  parent = environment(simulate_once)
+)
+for (s in 1:3) so(p, setup, "wastewater", s)
+invisible(gc())
+expect_equal(freed, 3)
+
 setwd(old)

@@ -132,6 +132,11 @@ triggers fire after the same number of cases:
 - **WW**: cumulative prodrome onsets on the collection day of the first sample
   above the WW threshold.
 
+Both medians are taken over the same runs, those where the case trigger fires.
+If WW never crosses the threshold in one of those runs, it counts as WW never
+seeing the outbreak, so a threshold cannot look well calibrated just by
+missing the outbreaks it would detect late.
+
 Because runs with the same seed share their trajectory until the trigger, the
 scenarios are paired, and the lead time is the case trigger day minus the WW
 trigger day in the same outbreak.
@@ -228,8 +233,11 @@ r85 <- p$R0 * (1 - p85$prop_vaccinated * p85$vax_efficacy)
   case-based scenarios are within simulation noise.
 - The WW lead comes from shedding during the prodrome (about 4 days before
   rash) plus the case-reporting delay, minus the lab turnaround. Each extra
-  day of turnaround removes about one day of lead. At 7 days the advantage
-  is gone (table below).
+  day of turnaround removes about one day of lead. With a 7-day turnaround,
+  the median lead is `r fmt(res[["0"]]$lab_delay[ww_lab_delay == 7, lead_median])`
+  days without vaccination and
+  `r fmt(res[["0.85"]]$lab_delay[ww_lab_delay == 7, lead_median])` days with
+  `r 100 * p85$prop_vaccinated`% coverage (table below).
 - Earlier detection pays off most when the outbreak grows fast *and* the
   triggered intervention is strong enough to bring R below one. With
   R0 = `r p$R0` and no vaccination, that would take broader measures than
