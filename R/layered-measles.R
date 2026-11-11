@@ -65,20 +65,7 @@ layered_setup <- function(p, school_contacts = 4, community_scale = 0.2,
        kernel = shedding_kernel(p$ww_t_peak, p$ww_t_end, p$ww_log10_vpeak))
 }
 
-# Run the existing surveillance process against the two-layer model.
+# Backwards-compatible name for the layered scenario runner.
 simulate_layered_once <- function(p, setup, scenario = "baseline", seed = 1L) {
-  stopifnot(scenario %in% c("baseline", "wastewater", "cases"))
-  m <- layered_measles(p, setup$persons, setup$community,
-                       setup$school_probability, setup$vaccinated)
-  state <- new.env(parent = emptyenv())
-  add_surveillance(m, p, setup, scenario, state)
-  set.seed(seed)
-  epiworldR::run(m, ndays = p$ndays, seed = seed)
-  days <- seq_len(p$ndays)
-  list(daily = data.frame(day = days, new_inf = state$new_inf,
-    new_prod = state$new_prod, new_rash = state$new_rash,
-    reported = state$reported[days], ww_true = state$ww_true,
-    ww_obs = state$ww_obs, cum_inf = state$cum_inf,
-    cum_prod = state$cum_prod, cum_rash = state$cum_rash),
-    trigger_day = state$trigger_day)
+  simulate_once(p, setup, scenario, seed)
 }

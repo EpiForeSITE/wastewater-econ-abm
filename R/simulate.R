@@ -10,8 +10,8 @@
 #                  `case_report_delay` days after rash onset. The intervention
 #                  starts when cumulative reports reach `trigger_cases`.
 #
-# The intervention reduces non-household contacts of school-age groups (see
-# `intervention_matrix()`) for the rest of the simulation.
+# The intervention reduces contacts in the school layer for the rest of the
+# simulation; community contacts remain unchanged.
 #
 # Scenarios run with the same seed share the same trajectory up to the
 # trigger day (both the model and R's RNG are seeded identically, and the
@@ -64,125 +64,47 @@ measles_ww_params <- function(...) {
 
 }
 
-#' Pre-computes the population, contact matrices, and shedding kernel
-#'
-#' The contact matrix is scaled so the basic reproduction number equals
-#' `R0`: R0 = transmission_rate * D * rho(M), with D the effective infectious
-#' period (prodromal + rash period weighted by the remaining contact rate).
-#' @param p Parameters from `measles_ww_params()`.
+#' Prepare the layered county population and calibrate transmission
 build_setup <- function(p) {
-
-  pop <- city_population(p$n)
-  cm  <- contact_matrices(pop)
-
-  d_eff <- p$prodromal_period +
-    (1 - p$rash_reduction_contact_rate) * p$rash_period
-
-  rho   <- max(Re(eigen(cm$Total, only.values = TRUE)$values))
-  scale <- p$R0 / (p$transmission_rate * d_eff * rho)
-
-  cm_int <- intervention_matrix(cm, reduction = p$school_contact_reduction)
-
-  setup <- list(
-    pop     = pop,
-    cm      = cm,
-    cm_base = cm$Total * scale,
-    cm_int  = cm_int * scale,
-    R_int   = p$R0 * max(Re(eigen(cm_int, only.values = TRUE)$values)) / rho,
-    kernel  = shedding_kernel(
-      t_peak      = p$ww_t_peak,
-      t_end       = p$ww_t_end,
-      log10_vpeak = p$ww_log10_vpeak
-    )
-  )
-
-  calibrate_r0(p, setup)
-
+  calibrate_r0(p, layered_setup(p))
 }
 
-#' Rescales the contact matrices so the simulated R0 matches the target
-#'
-#' The analytic scaling in `build_setup()` overstates the R0 realized by the
-#' agent-based model, so we estimate R0 by simulation (mean number of
-#' secondary infections of `n_seed` index cases, without vaccination) and
-#' rescale the contact matrices proportionally, a few times.
-#' @param p Parameters.
-#' @param setup Setup list with `cm_base` and `cm_int`.
-#' @param reps Simulations per iteration.
-#' @param iter Number of iterations.
-#' @param n_seed Number of index cases per simulation.
-#' @return The setup with rescaled matrices and the estimate in `R0_sim`.
-calibrate_r0 <- function(
-    p,
-    setup,
-    reps   = 100,
-    iter   = 3,
-    n_seed = 10
-) {
-
-  # R0 is defined for a fully susceptible population
-  p$n_seed          <- n_seed
-  p$prop_vaccinated <- 0
-
-  estimate <- function() {
-    mean(vapply(seq_len(reps), function(s) {
-      m <- build_model(p, setup)
-      epiworldR::run(m, ndays = 60, seed = s)
+#' Calibrate both layers against the simulated reproduction number
+#' Estimates include index cases with zero secondary infections.
+calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
+  p$n_seed <- n_seed
+  unvaccinated <- setup
+  unvaccinated$vaccinated <- integer()
+  estimate <- function(x) {
+    mean(vapply(seq_len(reps), function(seed) {
+      m <- build_model(p, x)
+      epiworldR::run(m, ndays = 60, seed = seed)
       rt <- as.data.frame(epiworldR::get_reproductive_number(m))
-      mean(rt$rt[rt$source_exposure_date == 0])
+      sum(rt$rt[rt$source_exposure_date == 0]) / n_seed
     }, numeric(1)))
   }
-
   for (i in seq_len(iter)) {
-    r <- estimate()
-    setup$cm_base <- setup$cm_base * p$R0 / r
-    setup$cm_int  <- setup$cm_int * p$R0 / r
+    r <- estimate(unvaccinated)
+    if (!is.finite(r) || r <= 0) stop("R0 calibration produced no transmission")
+    factor <- p$R0 / r
+    unvaccinated$community <- unvaccinated$community * factor
+    unvaccinated$school_probability <- pmin(1, unvaccinated$school_probability * factor)
   }
-
-  setup$R0_sim <- estimate()
+  setup$community <- unvaccinated$community
+  setup$school_probability <- unvaccinated$school_probability
+  setup$R0_sim <- estimate(unvaccinated)
+  unvaccinated$school_probability <- unvaccinated$school_probability *
+    (1 - p$school_contact_reduction)
+  setup$R_int <- estimate(unvaccinated)
   setup
-
 }
 
-#' Builds the measles mixing model with one entity per age group
-#' @param p Parameters.
-#' @param setup Output of `build_setup()`.
+#' Build the two-layer measles model used by all scenarios
 build_model <- function(p, setup) {
-
-  # Hospitalization rate matching the target probability (see
-  # ?measles::ModelMeaslesMixing)
-  h_rate <- p$prob_hospitalization * (1 / p$rash_period) /
-    (1 - p$prob_hospitalization)
-
-  m <- measles::ModelMeaslesMixing(
-    n                            = p$n,
-    prevalence                   = p$n_seed / p$n,
-    contact_matrix               = setup$cm_base,
-    transmission_rate            = p$transmission_rate,
-    prop_vaccinated              = p$prop_vaccinated,
-    vax_efficacy                 = p$vax_efficacy,
-    incubation_period            = p$incubation_period,
-    prodromal_period             = p$prodromal_period,
-    rash_period                  = p$rash_period,
-    rash_reduction_contact_rate  = p$rash_reduction_contact_rate,
-    hospitalization_rate         = h_rate,
-    hospitalization_period       = p$hospitalization_period,
-    # Individual-level public health responses are off in all scenarios
-    quarantine_willingness       = 0,
-    isolation_willingness        = 0,
-    contact_tracing_success_rate = 0
-  )
-
-  for (g in names(setup$pop)) {
-    epiworldR::add_entity(
-      m,
-      epiworldR::entity(g, setup$pop[[g]], as_proportion = FALSE)
-    )
-  }
-
-  epiworldR::verbose_off(m)
-  m
-
+  model <- layered_measles(p, setup$persons, setup$community,
+                           setup$school_probability, setup$vaccinated)
+  epiworldR::verbose_off(model)
+  model
 }
 
 #' Adds the surveillance process as a global event

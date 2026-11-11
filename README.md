@@ -13,9 +13,10 @@ then run `Rscript analysis/run-layered-example.R` from the project root. Run
 `Rscript tests/test-layered.R` for the layered checks. A UTF-8 locale may be
 needed to read the upstream Census CSV files.
 
-This is an initial implementation alongside the original scenarios below;
-`analysis/run-scenarios.R` and its existing results still use the earlier
-measles mixing API and have not been migrated to v1-layers.
+The main `build_model()` and scenario runner now use these two layers.
+The results and figures below were produced with the earlier mixing model;
+they have not been regenerated and should not be interpreted as results
+from the layered model.
 
 The same agents mix in the age-structured community layer and, for assigned
 students, one school group. School weights combine 2023 ACS district
@@ -26,8 +27,9 @@ Vaccination reduces susceptibility by `vax_efficacy`. The simulated community
 uses Household, Work and Other contact matrices; school contacts are modeled
 separately. The default school contact target is four per day, capped by the
 number of simulated schoolmates. Community contacts are scaled by 0.2.
-These initial values are **not calibrated to the requested R0** and the
-example results are illustrative, not estimates for Salt Lake County.
+The setup calibrates both layers against simulated transmission in a fully
+susceptible population. Small simulated schools cap per-pair contact
+probabilities, and calibration is stochastic; results are illustrative.
 
 Latent, prodromal, rash, hospitalized and recovered stages use the existing
 scenario parameters. Since this version of the layer engine only allows zero
