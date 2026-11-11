@@ -6,7 +6,7 @@ for (f in list.files("R", full.names = TRUE)) source(f)
 
 nsims        <- 400
 cores        <- max(1, parallel::detectCores() - 1)
-coverages    <- c(0, 0.85)
+coverages    <- c(0, 0.85) # Non-students; students use school-specific MMR rates
 lab_delays   <- c(0, 1, 3, 5, 7, 10)
 # WW sampling schedules (days of the week, t %% 7)
 sampling_schedules <- list(

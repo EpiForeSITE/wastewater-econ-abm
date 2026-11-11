@@ -33,8 +33,11 @@ measles_ww_params <- function(...) {
     vax_efficacy                = 0.97,
     transmission_rate           = 0.9,
     incubation_period           = 10,
+    incubation_period_sd        = 2.5,
     prodromal_period            = 4,
+    prodromal_period_sd         = 1.7,
     rash_period                 = 4,
+    rash_period_sd              = 1,
     rash_reduction_contact_rate = 0.5,
     prob_hospitalization        = 0.2,
     hospitalization_period      = 7,
@@ -78,6 +81,7 @@ calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
   estimate <- function(x) {
     mean(vapply(seq_len(reps), function(seed) {
       m <- build_model(p, x)
+      set.seed(seed)
       epiworldR::run(m, ndays = 60, seed = seed)
       rt <- as.data.frame(epiworldR::get_reproductive_number(m))
       sum(rt$rt[rt$source_exposure_date == 0]) / n_seed

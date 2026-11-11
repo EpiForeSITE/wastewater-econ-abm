@@ -21,3 +21,26 @@ stopifnot(is.na(base$trigger_day), !is.na(cases$trigger_day),
                     cases$daily$cum_inf[seq_len(cases$trigger_day)]),
           identical(base$daily$ww_true, ww$daily$ww_true) || !is.na(ww$trigger_day))
 cat("Layered model checks passed.\n")
+
+# A seeded cohort with contacts and hospitalization disabled exercises the
+# actual duration transitions. A fixed duration must not have the early and
+# long tail produced by a geometric waiting time.
+q <- measles_ww_params(n = 1000, n_seed = 1000, incubation_period_sd = 0,
+  prodromal_period_sd = 0, rash_period_sd = 0, prob_hospitalization = 0,
+  rash_reduction_contact_rate = 0)
+population <- list(age_group = rep(0L, q$n), school = rep(0L, q$n))
+fixed <- layered_measles(q, population, matrix(0, 1, 1), 0)
+epiworldR::verbose_off(fixed)
+epiworldR::run(fixed, ndays = 40, seed = 9)
+hist <- epiworldR::get_hist_total(fixed)
+latent <- hist[hist$stage == "Latent", ]
+stopifnot(all(latent$counts[latent$date < q$incubation_period] == q$n),
+          all(latent$counts[latent$date > q$incubation_period + 1] == 0))
+q$incubation_period_sd <- 2.5
+varying <- layered_measles(q, population, matrix(0, 1, 1), 0)
+epiworldR::verbose_off(varying)
+epiworldR::run(varying, ndays = 40, seed = 9)
+hist_varying <- epiworldR::get_hist_total(varying)
+latent_varying <- hist_varying[hist_varying$stage == "Latent", ]
+stopifnot(any(latent_varying$counts[latent_varying$date < q$incubation_period] < q$n),
+          any(latent_varying$counts[latent_varying$date > q$incubation_period + 1] > 0))
