@@ -1,8 +1,17 @@
+set.seed(137)
+
 # Runs the scenarios and stores aggregate results in analysis/results.rds.
 # Usage (from the project root): Rscript analysis/run-scenarios.R
 
 library(data.table)
 for (f in list.files("R", full.names = TRUE)) source(f)
+
+# Initialize each paired replicate at the execution boundary.
+run_replicate <- function(p, setup, scenario, seed) {
+  set.seed(seed)
+  simulate_once(p, setup, scenario, seed)
+}
+run_batch <- function(...) run_scenarios(..., runner = run_replicate)
 
 nsims        <- 400
 cores        <- max(1, parallel::detectCores() - 1)
@@ -112,14 +121,14 @@ for (cov in coverages) {
     prop_vaccinated  = cov,
     case_report_prob = report_prob_ref
   )
-  setup <- build_setup(p)
+  setup <- build_setup(p, inputs = salt_lake_inputs(p$n))
 
-  baseline <- run_scenarios(p, setup, nsims, "baseline", cores = cores)
+  baseline <- run_batch(p, setup, nsims, "baseline", cores = cores)
 
   cal <- calibrate_ww_threshold(baseline, p)
   p$trigger_ww <- cal$threshold
 
-  triggered <- run_scenarios(
+  triggered <- run_batch(
     p,
     setup,
     nsims,
@@ -130,7 +139,7 @@ for (cov in coverages) {
   # Sensitivity: WW lab turnaround time (threshold kept fixed)
   lab <- rbindlist(lapply(lab_delays, function(ld) {
     pl  <- utils::modifyList(p, list(ww_lab_delay = ld))
-    out <- run_scenarios(pl, setup, nsims, "wastewater", cores = cores)
+    out <- run_batch(pl, setup, nsims, "wastewater", cores = cores)
     s   <- summarise_runs(out, baseline, pl)
     s[, ww_lab_delay := ld][]
   }))
@@ -146,7 +155,7 @@ for (cov in coverages) {
       p,
       list(ww_sampling_days = sampling_schedules[[k]])
     )
-    out <- run_scenarios(ps, setup, nsims, "wastewater", cores = cores)
+    out <- run_batch(ps, setup, nsims, "wastewater", cores = cores)
     s   <- summarise_runs(out, baseline, ps, case_days = case_days)
     s[, samples_per_week := as.integer(k)][]
   }))
@@ -159,7 +168,7 @@ for (cov in coverages) {
   ww_days <- triggered[scenario == "wastewater", .(sim, t_ww = trigger_day)]
   report <- rbindlist(lapply(report_probs, function(rp) {
     pr  <- utils::modifyList(p, list(case_report_prob = rp))
-    out <- run_scenarios(pr, setup, nsims, "cases", cores = cores)
+    out <- run_batch(pr, setup, nsims, "cases", cores = cores)
     s   <- summarise_runs(out, baseline, pr, ww_days = ww_days)
     s[, case_report_prob := rp][]
   }))

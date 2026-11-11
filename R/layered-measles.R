@@ -1,3 +1,5 @@
+library(epiworldR)
+
 #' Construct the two-layer measles model
 #'
 #' Latent and prodromal periods are lognormal draws on entry, parameterized
@@ -13,46 +15,113 @@
 #' @return An epiworldR model with community and school layers.
 #' @references Lessler et al. (2009), doi:10.1016/S1473-3099(09)70069-6.
 #'   Meyer et al. (2017), doi:10.18637/jss.v077.i11.
-layered_measles <- function(p, population, community_matrix, school_probability,
-                            vaccinated = integer()) {
+layered_measles <- function(
+    p,
+    population,
+    community_matrix,
+    school_probability,
+    vaccinated = integer()
+) {
   stopifnot(length(population$age_group) == p$n,
             length(population$school) == p$n)
-  virus <- epiworldR::virus("Measles")
-  epiworldR::add_stage(virus, "Susceptible")
-  epiworldR::add_stage(virus, "Latent", carrier = TRUE)
-  epiworldR::add_stage(virus, "Prodromal", infectious = TRUE)
-  epiworldR::add_stage(virus, "Rash", infectious = TRUE)
-  epiworldR::add_stage(virus, "Rash isolated", infectious = TRUE)
-  epiworldR::add_stage(virus, "Hospitalized", carrier = TRUE)
-  epiworldR::add_stage(virus, "Recovered")
-  # A random fraction of rash cases leave all layers. This matches the
-  # requested average reduction but is not identical to fractional contacts
-  # for every case.
-  epiworldR::set_contact(virus, "Rash isolated", 0)
-  epiworldR::set_contact(virus, "Hospitalized", 0)
-  epiworldR::add_infection(virus, "Susceptible", "Latent", p$transmission_rate)
-  epiworldR::add_after(virus, "Latent", "Prodromal",
-    epiworldR::duration_lognormal(p$incubation_period, p$incubation_period_sd))
-  epiworldR::add_after(virus, "Prodromal", "Rash",
-    epiworldR::duration_lognormal(p$prodromal_period, p$prodromal_period_sd))
-  for (stage in c("Rash", "Rash isolated"))
-    epiworldR::add_after(virus, stage, "Recovered",
-      epiworldR::duration_lognormal(p$rash_period, p$rash_period_sd))
-  epiworldR::add_external(virus, "Rash", "Rash isolated", "Isolate rash")
-  epiworldR::add_rate(virus, c("Rash", "Rash isolated"), "Hospitalized",
-    rash_hospitalization_rate(p$prob_hospitalization, p$rash_period, p$rash_period_sd))
-  epiworldR::add_rate(virus, "Hospitalized", "Recovered", 1 / p$hospitalization_period)
+  # Define disease stages and their progression using the model builder.
+  virus <- virus(name = "Measles") |>
+    add_stage(label = "Susceptible") |>
+    add_stage(label = "Latent", carrier = TRUE) |>
+    add_stage(label = "Prodromal", infectious = TRUE) |>
+    add_stage(label = "Rash", infectious = TRUE) |>
+    add_stage(label = "Rash isolated", infectious = TRUE) |>
+    add_stage(label = "Hospitalized", carrier = TRUE) |>
+    add_stage(label = "Recovered") |>
+    set_contact(stage = "Rash isolated", weight = 0) |>
+    set_contact(stage = "Hospitalized", weight = 0) |>
+    add_infection(
+      from = "Susceptible",
+      to   = "Latent",
+      rate = p$transmission_rate
+    ) |>
+    add_after(
+      from     = "Latent",
+      to       = "Prodromal",
+      duration = duration_lognormal(
+        mean = p$incubation_period,
+        sd   = p$incubation_period_sd
+      )
+    ) |>
+    add_after(
+      from     = "Prodromal",
+      to       = "Rash",
+      duration = duration_lognormal(
+        mean = p$prodromal_period,
+        sd   = p$prodromal_period_sd
+      )
+    )
 
-  model <- epiworldR::Model(p$n)
-  epiworldR::add_layer(model, epiworldR::layer_mixing("community",
-    groups = as.integer(population$age_group), contact_matrix = community_matrix))
-  epiworldR::add_layer(model, epiworldR::layer_mixing("schools",
-    groups = as.integer(population$school), contact_prob = school_probability))
-  epiworldR::add_virus(model, virus, epiworldR::assign_count(p$n_seed))
-  epiworldR::add_globalevent(model, rash_isolation_event(p$n, p$rash_reduction_contact_rate))
+  # Both rash stages share the recovery and hospitalization mechanisms.
+  for (stage in c("Rash", "Rash isolated")) {
+    virus <- virus |>
+      add_after(
+        from     = stage,
+        to       = "Recovered",
+        duration = duration_lognormal(
+          mean = p$rash_period,
+          sd   = p$rash_period_sd
+        )
+      )
+  }
+  virus <- virus |>
+    add_external(
+      from            = "Rash",
+      to              = "Rash isolated",
+      transition_name = "Isolate rash"
+    ) |>
+    add_rate(
+      from = c("Rash", "Rash isolated"),
+      to   = "Hospitalized",
+      rate = rash_hospitalization_rate(
+        probability = p$prob_hospitalization,
+        mean        = p$rash_period,
+        sd          = p$rash_period_sd
+      )
+    ) |>
+    add_rate(
+      from = "Hospitalized",
+      to   = "Recovered",
+      rate = 1 / p$hospitalization_period
+    )
+
+  # Add the two contact layers, seed infections, and register rash isolation.
+  model <- Model(n = p$n) |>
+    add_layer(
+      layer = layer_mixing(
+        name           = "community",
+        groups         = as.integer(population$age_group),
+        contact_matrix = community_matrix
+      )
+    ) |>
+    add_layer(
+      layer = layer_mixing(
+        name         = "schools",
+        groups       = as.integer(population$school),
+        contact_prob = school_probability
+      )
+    ) |>
+    add_virus(virus = virus, assign = assign_count(n = p$n_seed)) |>
+    add_globalevent(
+      event = rash_isolation_event(n = p$n, probability = p$rash_reduction_contact_rate)
+    )
+
+  # Apply MMR protection to the supplied agents.
   if (length(vaccinated)) {
-    vaccine <- epiworldR::tool("MMR", p$vax_efficacy, 0, 0, 0)
-    epiworldR::add_tool(model, vaccine, epiworldR::assign_agents(as.integer(vaccinated)))
+    vaccine <- tool(
+      name                     = "MMR",
+      susceptibility_reduction = p$vax_efficacy,
+      transmission_reduction   = 0,
+      recovery_enhancer        = 0,
+      death_reduction          = 0
+    )
+    model <- model |>
+      add_tool(tool = vaccine, assign = assign_agents(ids = as.integer(vaccinated)))
   }
   model
 }
@@ -68,14 +137,14 @@ layered_measles <- function(p, population, community_matrix, school_probability,
 rash_isolation_event <- function(n, probability) {
   was_rash <- rep(FALSE, n)
   isolate <- function(m) {
-    if (epiworldR::today(m) == 1) was_rash[] <<- FALSE
-    current <- epiworldR::get_agents_stages(m) == "Rash"
+    if (today(m) == 1) was_rash[] <<- FALSE
+    current <- get_agents_stages(m) == "Rash"
     new <- which(current & !was_rash)
     was_rash[new] <<- TRUE
     chosen <- new[stats::runif(length(new)) < probability]
-    for (i in chosen) epiworldR::fire(m, "Isolate rash", i - 1L)
+    for (i in chosen) fire(m, "Isolate rash", i - 1L)
   }
-  epiworldR::globalevent_fun(isolate, name = "Rash isolation", day = -99)
+  globalevent_fun(isolate, name = "Rash isolation", day = -99)
 }
 
 #' Convert a target hospitalization probability to a daily rash hazard
@@ -87,13 +156,19 @@ rash_isolation_event <- function(n, probability) {
 #' @return Daily hospitalization probability.
 rash_hospitalization_rate <- function(probability, mean, sd) {
   stopifnot(probability >= 0, probability < 1, mean > 0, sd >= 0)
+
+  # Handle degenerate distributions before numerical integration.
   if (probability == 0) return(0)
   if (sd == 0) return(1 - (1 - probability)^(1 / max(1, round(mean))))
+
+  # Integrate the rounded lognormal duration to recover a daily hazard.
   s2 <- log1p((sd / mean)^2)
   days <- seq_len(1000L)
   mass <- diff(c(0, stats::plnorm(days + .5, log(mean) - s2 / 2, sqrt(s2))))
-  stats::uniroot(function(h) 1 - sum(mass * (1 - h)^days) - probability,
-                 c(0, 1))$root
+  stats::uniroot(
+    f        = function(h) 1 - sum(mass * (1 - h)^days) - probability,
+    interval = c(0, 1)
+  )$root
 }
 
 #' Prepare agents and contacts for the layered model
@@ -104,27 +179,53 @@ rash_hospitalization_rate <- function(probability, mean, sd) {
 #' @param p Parameters from [measles_ww_params()].
 #' @param school_contacts Target daily contacts per student.
 #' @param community_scale Multiplier for the initial community matrix.
-#' @param seed Seed for population and vaccination assignment.
+#' @param pop Age-group population counts.
+#' @param schools School records with id, level, and vaxrate columns.
+#' @param weights School sampling weights, in school-record order.
+#' @param cm Contact matrices by setting.
 #' @return A list of population, contact and shedding inputs.
-layered_setup <- function(p, school_contacts = 4, community_scale = 0.2,
-                          seed = 137L) {
-  pop <- city_population(p$n)
-  persons <- assign_schools(pop, seed)
-  cm <- contact_matrices(pop)
+layered_setup <- function(
+    p,
+    pop,
+    schools,
+    weights,
+    cm,
+    school_contacts  = 4,
+    community_scale = 0.2
+) {
+  # Construct agent memberships from the application inputs.
+  persons <- assign_schools(
+    pop     = pop,
+    schools = schools,
+    weights = weights
+  )
+
+  # Scale community contacts and cap within-school probabilities.
   community <- (cm$Household + cm$Work + cm$Other) * community_scale
-  sizes <- tabulate(persons$school + 1L, nbins = max(persons$school, na.rm = TRUE) + 1L)
+  sizes <- tabulate(
+    bin    = persons$school + 1L,
+    nbins  = length(unique(schools$id))
+  )
   school_prob <- pmin(1, school_contacts / pmax(1, sizes - 1L))
-  old <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit(if (is.null(old)) {
-    if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
-  } else assign(".Random.seed", old, envir = .GlobalEnv))
-  set.seed(seed + 1L)
+
+  # Use the caller's RNG stream to assign vaccination.
   coverage <- persons$coverage
   coverage[is.na(coverage)] <- p$prop_vaccinated
   vaccinated <- which(stats::runif(p$n) < coverage) - 1L
-  list(pop = pop, persons = persons, community = community,
-       school_probability = school_prob, vaccinated = vaccinated,
-       kernel = shedding_kernel(p$ww_t_peak, p$ww_t_end, p$ww_log10_vpeak))
+
+  # Return inputs shared by calibration and the scenario runner.
+  list(
+    pop                = pop,
+    persons            = persons,
+    community          = community,
+    school_probability = school_prob,
+    vaccinated         = vaccinated,
+    kernel             = shedding_kernel(
+      t_peak      = p$ww_t_peak,
+      t_end       = p$ww_t_end,
+      log10_vpeak = p$ww_log10_vpeak
+    )
+  )
 }
 
 #' Run one layered scenario

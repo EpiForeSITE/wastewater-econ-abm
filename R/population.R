@@ -32,7 +32,7 @@ utah_schools <- function(county = "Salt Lake", path =
 #' school fractions are shares of the district school-age population. This
 #' assumes the five district boundaries cover the county and that a school's
 #' district-level share applies to its resident students.
-school_weights <- function(schools = utah_schools(), path =
+utah_school_weights <- function(schools = utah_schools(), path =
     "data/utah/acs_Utah_2023_school_districts.csv") {
   acs <- utils::read.csv(path, check.names = FALSE, fileEncoding = "UTF-8-BOM")
   district <- unique(schools$schooldistrictlocation)
@@ -51,26 +51,44 @@ school_weights <- function(schools = utah_schools(), path =
 #' Age groups are five-year bands. Three fifths of the 15--19 group are
 #' assumed to be 15--17; 5--9 and 10--14 are assigned in full. School level
 #' cutoffs are approximated by the available age bands, not individual grades.
-assign_schools <- function(pop, seed = 137L) {
-  schools <- utah_schools()
-  weights <- school_weights(schools)
-  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
-    get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit(if (is.null(old_seed)) {
-    if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
-  } else assign(".Random.seed", old_seed, envir = .GlobalEnv))
-  set.seed(seed)
+#' @param pop Age-band population counts.
+#' @param schools Application school records with id, level and vaxrate.
+#' @param weights Sampling weights in school-record order.
+#' @param age_levels School level assigned to each age band, or NA.
+#' @param attendance Fraction attending school within each age band.
+#' @return Age groups, school IDs and coverage for each simulated agent.
+assign_schools <- function(
+    pop,
+    schools,
+    weights,
+    age_levels = c(NA, 1L, 2L, 3L, rep(NA, 12)),
+    attendance = c(0, 1, 1, 3 / 5, rep(0, 12))
+) {
+  # Assign school levels using caller-supplied age-band attendance rules.
+  stopifnot(length(age_levels) == length(pop), length(attendance) == length(pop))
   ages <- rep(seq_along(pop), pop)
   level <- rep(NA_integer_, length(ages))
-  level[ages == 2L] <- 1L
-  level[ages == 3L] <- 2L
-  candidates <- which(ages == 4L)
-  level[sample(candidates, floor(length(candidates) * 3 / 5))] <- 3L
+  for (g in seq_along(pop)) {
+    candidates <- which(ages == g)
+    selected <- candidates[sample.int(
+      n    = length(candidates),
+      size = floor(length(candidates) * attendance[g])
+    )]
+    level[selected] <- age_levels[g]
+  }
+
+  # Draw schools within each level using the supplied population weights.
   row <- rep(NA_integer_, length(ages))
-  for (j in 1:3) {
+  for (j in unique(stats::na.omit(age_levels))) {
     idx <- which(level == j)
     choices <- which(schools$level == j)
-    row[idx] <- sample(choices, length(idx), replace = TRUE, prob = weights[choices])
+    if (length(idx) && !length(choices)) stop("No schools for level: ", j)
+    row[idx] <- choices[sample.int(
+      n       = length(choices),
+      size    = length(idx),
+      replace = TRUE,
+      prob    = weights[choices]
+    )]
   }
   school_id <- match(schools$id[row], unique(schools$id)) - 1L
   list(age_group = ages - 1L, school = school_id,

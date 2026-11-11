@@ -67,9 +67,13 @@ measles_ww_params <- function(...) {
 
 }
 
-#' Prepare the layered county population and calibrate transmission
-build_setup <- function(p) {
-  calibrate_r0(p, layered_setup(p))
+#' Prepare the application population and calibrate transmission
+#' @param p Model parameters.
+#' @param inputs Application inputs for [layered_setup()].
+#' @return Calibrated layered setup.
+build_setup <- function(p, inputs) {
+  setup <- do.call(layered_setup, c(list(p = p), inputs))
+  calibrate_r0(p, setup)
 }
 
 #' Calibrate both layers against the simulated reproduction number
@@ -81,7 +85,6 @@ calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
   estimate <- function(x) {
     mean(vapply(seq_len(reps), function(seed) {
       m <- build_model(p, x)
-      set.seed(seed)
       epiworldR::run(m, ndays = 60, seed = seed)
       rt <- as.data.frame(epiworldR::get_reproductive_number(m))
       sum(rt$rt[rt$source_exposure_date == 0]) / n_seed
@@ -240,7 +243,7 @@ add_surveillance <- function(m, p, setup, scenario, state) {
 #' @param p Parameters.
 #' @param setup Output of `build_setup()`.
 #' @param scenario One of "baseline", "wastewater", or "cases".
-#' @param seed Seed for both the model and R's RNG.
+#' @param seed Seed for the C++ model. The caller controls R's RNG.
 #' @return A list with the daily series (`daily`) and the trigger day.
 simulate_once <- function(p, setup, scenario, seed) {
 
@@ -250,7 +253,6 @@ simulate_once <- function(p, setup, scenario, seed) {
   state <- new.env(parent = emptyenv())
   add_surveillance(m, p, setup, scenario, state)
 
-  set.seed(seed)
   epiworldR::run(m, ndays = p$ndays, seed = seed)
 
   days <- seq_len(p$ndays)
@@ -278,6 +280,7 @@ simulate_once <- function(p, setup, scenario, seed) {
 #' @param nsims Number of simulations per scenario.
 #' @param scenarios Scenarios to run.
 #' @param seed0 Seeds are `seed0 + 1:nsims`, shared across scenarios.
+#' @param runner Execution callback; scripts can initialize R RNG per replicate.
 #' @param cores Number of cores passed to `parallel::mclapply()`.
 #' @return A data.table with one row per simulation and scenario, with the
 #' daily series in the `daily` list column.
@@ -287,7 +290,8 @@ run_scenarios <- function(
     nsims     = 100,
     scenarios = c("baseline", "wastewater", "cases"),
     seed0     = 1000,
-    cores     = 1
+    cores     = 1,
+    runner    = simulate_once
 ) {
 
   grid <- expand.grid(
@@ -298,7 +302,7 @@ run_scenarios <- function(
 
   res <- parallel::mclapply(
     seq_len(nrow(grid)),
-    function(i) simulate_once(p, setup, grid$scenario[i], seed0 + grid$sim[i]),
+    function(i) runner(p, setup, grid$scenario[i], seed0 + grid$sim[i]),
     mc.cores = cores
   )
 

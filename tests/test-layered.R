@@ -1,20 +1,28 @@
+set.seed(137)
+
 # Run from repository root: Rscript tests/test-layered.R
 if (!dir.exists("R")) setwd("..")
 for (f in list.files("R", full.names = TRUE)) source(f)
+
+# The execution script owns RNG initialization for paired runs.
+run_replicate <- function(p, setup, scenario, seed) {
+  set.seed(seed)
+  simulate_once(p, setup, scenario, seed)
+}
 p <- measles_ww_params(n = 4000, ndays = 80, n_seed = 20,
   prop_vaccinated = 0, trigger_cases = 1, case_report_prob = 1,
   case_report_delay = 0)
-setup <- layered_setup(p)
+setup <- do.call(layered_setup, c(list(p = p), salt_lake_inputs(p$n)))
 model <- build_model(p, setup)
 stopifnot(inherits(epiworldR::get_layer(model, "community"), "epiworld_layer_mixing"),
           inherits(epiworldR::get_layer(model, "schools"), "epiworld_layer_mixing"))
 stopifnot(sum(setup$pop) == p$n, length(setup$persons$school) == p$n,
           all(setup$school_probability >= 0 & setup$school_probability <= 1),
           all(setup$persons$coverage[!is.na(setup$persons$school)] >= 0),
-          abs(sum(school_weights()) - 1) < 1e-10)
-base <- simulate_once(p, setup, "baseline", 42)
-cases <- simulate_once(p, setup, "cases", 42)
-ww <- simulate_once(p, setup, "wastewater", 42)
+          abs(sum(utah_school_weights()) - 1) < 1e-10)
+base <- run_replicate(p, setup, "baseline", 42)
+cases <- run_replicate(p, setup, "cases", 42)
+ww <- run_replicate(p, setup, "wastewater", 42)
 stopifnot(is.na(base$trigger_day), !is.na(cases$trigger_day),
           all(diff(base$daily$cum_inf) >= 0),
           identical(base$daily$cum_inf[seq_len(cases$trigger_day)],
@@ -44,3 +52,16 @@ hist_varying <- epiworldR::get_hist_total(varying)
 latent_varying <- hist_varying[hist_varying$stage == "Latent", ]
 stopifnot(any(latent_varying$counts[latent_varying$date < q$incubation_period] < q$n),
           any(latent_varying$counts[latent_varying$date > q$incubation_period + 1] > 0))
+
+# A different application's records can use arbitrary school IDs and weights.
+other_schools <- data.frame(
+  id = c("A", "B", "C"), level = 1:3, vaxrate = c(.7, .8, .9)
+)
+other <- assign_schools(
+  pop     = rep(10L, 16),
+  schools = other_schools,
+  weights = rep(1, 3)
+)
+stopifnot(length(other$school) == 160,
+          all(other$school[!is.na(other$school)] %in% 0:2),
+          all(other$coverage[!is.na(other$school)] %in% other_schools$vaxrate))

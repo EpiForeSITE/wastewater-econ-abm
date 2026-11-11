@@ -196,9 +196,17 @@ knitr::kable(format_ww_parameters(ww_parameters()), escape = FALSE)
 ## Reproducibility and limitations
 
 The saved aggregate results are in [analysis/results.rds](analysis/results.rds).
-The previous model's report is retained as a [historical report](reports/previous-results.md).
+Earlier reports and parameters are available in Git history.
 See [data/parameters.csv](data/parameters.csv) for the parameter table and
 sources, and [data/epistorm](data/epistorm/README.md) for contact matrices.
 These scenarios use assumptions about school membership, immunity, shedding,
 contact rates and response behavior. They do not constitute forecasts or
 validate wastewater sensitivity against observed Salt Lake County outbreaks.
+
+Reusable setup accepts explicit population counts, school records, school
+weights, and contact matrices. `salt_lake_inputs()` is the current application
+adapter; other locations supply the same input structure to `build_setup()`.
+Setup functions consume the caller's R RNG stream. Execution scripts initialize
+the stream and reset it at paired-replicate boundaries. The results above were
+generated before this seed-ownership refactor, with the former fixed setup
+seeds; they have not been regenerated for new caller-selected populations.

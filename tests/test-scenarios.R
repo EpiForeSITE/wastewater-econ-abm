@@ -1,8 +1,17 @@
+set.seed(137)
+
 # End-to-end tests of the measles wastewater simulation.
 # Run from the project root with: tinytest::run_test_dir("tests")
 
 library(data.table)
 for (f in list.files(file.path("..", "R"), full.names = TRUE)) source(f)
+
+# Initialize each paired replicate at the execution boundary.
+run_replicate <- function(p, setup, scenario, seed) {
+  set.seed(seed)
+  simulate_once(p, setup, scenario, seed)
+}
+run_batch <- function(...) run_scenarios(..., runner = run_replicate)
 old <- setwd("..")
 
 # Shedding profile is a proper distribution peaking at t_peak
@@ -11,13 +20,13 @@ expect_equal(sum(k), 1)
 expect_equal(which.max(k) - 1, 4)
 
 p     <- measles_ww_params(ndays = 150, trigger_ww = 5)
-setup <- build_setup(p)
+setup <- build_setup(p, inputs = salt_lake_inputs(p$n))
 
 expect_equal(sum(setup$pop), p$n)
 expect_true(abs(setup$R0_sim - p$R0) / p$R0 < 0.1)
 expect_true(setup$R_int < p$R0)
 
-runs <- run_scenarios(p, setup, nsims = 20)
+runs <- run_batch(p, setup, nsims = 20)
 
 # Baseline never triggers; intervention scenarios trigger in outbreaks
 expect_true(all(is.na(runs[scenario == "baseline", trigger_day])))
@@ -46,7 +55,7 @@ expect_equal(
 # so WW triggers do not depend on it and a lower probability never makes the
 # case-based trigger fire earlier
 p_lo <- utils::modifyList(p, list(case_report_prob = 0.3))
-lo   <- run_scenarios(p_lo, setup, nsims = 20, scenarios = c("wastewater", "cases"))
+lo   <- run_batch(p_lo, setup, nsims = 20, scenarios = c("wastewater", "cases"))
 expect_equal(lo[scenario == "wastewater", trigger_day], w$trigger_day)
 hi_cases <- runs[scenario == "cases", trigger_day]
 lo_cases <- lo[scenario == "cases", trigger_day]
@@ -67,8 +76,8 @@ expect_true(
 # WW sampling schedule: the measurement error is drawn every day, so
 # schedules share the shedding and the measurements on their common days
 p_s5 <- utils::modifyList(p, list(ww_sampling_days = 1:5))
-s3   <- simulate_once(p, setup, "baseline", 1001)$daily
-s5   <- simulate_once(p_s5, setup, "baseline", 1001)$daily
+s3   <- run_replicate(p, setup, "baseline", 1001)$daily
+s5   <- run_replicate(p_s5, setup, "baseline", 1001)$daily
 expect_equal(s5$ww_true, s3$ww_true)
 common <- (s3$day %% 7) %in% p$ww_sampling_days
 expect_equal(s5$ww_obs[common], s3$ww_obs[common])
