@@ -1,6 +1,43 @@
 # Measles wastewater surveillance with epiworldR
 
 
+## Two-layer measles prototype
+The runnable two-layer example uses the `v1-layers` branch of epiworldR:
+
+```r
+remotes::install_github("UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51")
+```
+
+Install `multigroup.vaccine`, `measles`, and `data.table` as described below,
+then run `Rscript analysis/run-layered-example.R` from the project root. Run
+`Rscript tests/test-layered.R` for the layered checks. A UTF-8 locale may be
+needed to read the upstream Census CSV files.
+
+This is an initial implementation alongside the original scenarios below;
+`analysis/run-scenarios.R` and its existing results still use the earlier
+measles mixing API and have not been migrated to v1-layers.
+
+The same agents mix in the age-structured community layer and, for assigned
+students, one school group. School weights combine 2023 ACS district
+populations with upstream school shares; they are approximate, and school
+level is approximated from five-year age bands. Two-dose MMR coverage comes
+from the school records; `prop_vaccinated` sets coverage for other agents.
+Vaccination reduces susceptibility by `vax_efficacy`. The simulated community
+uses Household, Work and Other contact matrices; school contacts are modeled
+separately. The default school contact target is four per day, capped by the
+number of simulated schoolmates. Community contacts are scaled by 0.2.
+These initial values are **not calibrated to the requested R0** and the
+example results are illustrative, not estimates for Salt Lake County.
+
+Latent, prodromal, rash, hospitalized and recovered stages use the existing
+scenario parameters. Since this version of the layer engine only allows zero
+or full stage contact weights, a random proportion of rash cases leave both
+layers during rash; this preserves the average reduction but changes its
+individual distribution. The surveillance-triggered intervention reduces
+school contacts only. Wastewater still represents the entire simulated
+population, and uses the existing shedding and trigger assumptions.
+
+
 This project simulates measles outbreaks in a synthetic city of 10,000
 people and compares three scenarios:
 

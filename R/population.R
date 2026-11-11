@@ -10,6 +10,73 @@ age_limits <- seq(0, 75, by = 5)
 
 settings <- c("Household", "School", "Work", "Other")
 
+#' School-level measles coverage and district population shares
+#'
+#' Shares are within school districts, not across the county. They must be
+#' combined with district population estimates before assigning students.
+utah_schools <- function(county = "Salt Lake", path =
+    "data/utah/school_district_schoolID_data_Utah_2025.csv") {
+  x <- utils::read.csv(path, stringsAsFactors = FALSE)
+  x <- x[x$county == county, , drop = FALSE]
+  if (!nrow(x)) stop("No schools found for county: ", county)
+  if (anyNA(x[c("id", "schooldistrictlocation", "level", "popfrac", "vaxrate")]) ||
+      anyDuplicated(x[c("id", "level")]) || any(!x$level %in% 1:3) ||
+      any(x$popfrac < 0) || any(x$vaxrate < 0 | x$vaxrate > 1))
+    stop("Invalid school records")
+  x
+}
+
+#' Approximate county-wide school weights from school-district ACS estimates
+#'
+#' District shares use the population aged 5--17 in the 2023 ACS. The source
+#' school fractions are shares of the district school-age population. This
+#' assumes the five district boundaries cover the county and that a school's
+#' district-level share applies to its resident students.
+school_weights <- function(schools = utah_schools(), path =
+    "data/utah/acs_Utah_2023_school_districts.csv") {
+  acs <- utils::read.csv(path, check.names = FALSE, fileEncoding = "UTF-8-BOM")
+  district <- unique(schools$schooldistrictlocation)
+  labels <- ifelse(district == "SALT LAKE", "Salt Lake City", tools::toTitleCase(tolower(district)))
+  cols <- paste0(labels, " School District, UT")
+  if (any(!cols %in% names(acs))) stop("Missing district in ACS data")
+  ages <- as.numeric(acs[[1]])
+  population <- vapply(cols, function(col) sum(acs[[col]][ages %in% c(5, 10, 15, 16)]), numeric(1))
+  if (anyNA(population) || any(population <= 0)) stop("Invalid ACS district population")
+  weights <- population[match(schools$schooldistrictlocation, district)] * schools$popfrac
+  weights / sum(weights)
+}
+
+#' Assign school-aged agents to schools and retain their MMR coverage
+#'
+#' Age groups are five-year bands. Three fifths of the 15--19 group are
+#' assumed to be 15--17; 5--9 and 10--14 are assigned in full. School level
+#' cutoffs are approximated by the available age bands, not individual grades.
+assign_schools <- function(pop, seed = 137L) {
+  schools <- utah_schools()
+  weights <- school_weights(schools)
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
+    get(".Random.seed", envir = .GlobalEnv) else NULL
+  on.exit(if (is.null(old_seed)) {
+    if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  } else assign(".Random.seed", old_seed, envir = .GlobalEnv))
+  set.seed(seed)
+  ages <- rep(seq_along(pop), pop)
+  level <- rep(NA_integer_, length(ages))
+  level[ages == 2L] <- 1L
+  level[ages == 3L] <- 2L
+  candidates <- which(ages == 4L)
+  level[sample(candidates, floor(length(candidates) * 3 / 5))] <- 3L
+  row <- rep(NA_integer_, length(ages))
+  for (j in 1:3) {
+    idx <- which(level == j)
+    choices <- which(schools$level == j)
+    row[idx] <- sample(choices, length(idx), replace = TRUE, prob = weights[choices])
+  }
+  school_id <- match(schools$id[row], unique(schools$id)) - 1L
+  list(age_group = ages - 1L, school = school_id,
+       coverage = schools$vaxrate[row], school_row = row)
+}
+
 #' Read an Epistorm-Mix setting-specific M-matrix
 #' @param setting One of `settings`.
 #' @param path Directory with the CSV files.

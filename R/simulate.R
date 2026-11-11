@@ -219,6 +219,13 @@ add_surveillance <- function(m, p, setup, scenario, state) {
       reset()
 
     tot <- epiworldR::get_today_total(m)
+    if (is.data.frame(tot)) {
+      counts <- tapply(tot$counts, tot$stage, sum)
+      tot <- c(Susceptible = 0, `Quarantined Susceptible` = 0,
+               Latent = 0, `Quarantined Latent` = 0,
+               Prodromal = 0, `Quarantined Prodromal` = 0)
+      tot[names(counts)] <- counts
+    }
     cum <- c(
       inf  = p$n - tot[["Susceptible"]] - tot[["Quarantined Susceptible"]]
     )
@@ -279,7 +286,12 @@ add_surveillance <- function(m, p, setup, scenario, state) {
 
     if (fire) {
       state$trigger_day <- t
-      epiworldR::set_contact_matrix(m, setup$cm_int)
+      if (!is.null(setup$school_probability)) {
+        epiworldR::set_contact_prob(epiworldR::get_layer(m, "schools"),
+          setup$school_probability * (1 - p$school_contact_reduction))
+      } else {
+        epiworldR::set_contact_matrix(m, setup$cm_int)
+      }
     }
 
     invisible(NULL)
