@@ -10,14 +10,24 @@ simulation, not an estimate of an actual outbreak.
 
 ## Run the model
 
-Install `epiworldR` from the `v1-layers` commit used here and install
-`multigroup.vaccine`, `measles`, `data.table`, and `remotes`:
+The local and browser devcontainers install the exact layered epiworldR
+commit and pinned analysis dependencies. Outside the devcontainer, install
+Quarto and the `data.table`, `ggplot2`, `tinytest`, `knitr`, `rmarkdown`,
+and `remotes` R packages, then install the two GitHub packages:
 
 ```r
 remotes::install_github(
   "UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51"
 )
+remotes::install_github(
+  "EpiForeSITE/multigroup-vaccine@ddd9201f28b9908c033542f6a2445b84619af1c7"
+)
 ```
+
+The container pins R 4.6.1 and Quarto 1.9.35, uses the 2026-10-20 CRAN
+snapshot, and checks direct package versions and Git commit hashes at build
+time. The version checks are in
+[.devcontainer/check-dependencies.R](.devcontainer/check-dependencies.R).
 
 From the repository root, run `Rscript analysis/run-layered-example.R` for a
 single seeded comparison or `Rscript analysis/run-scenarios.R` for the larger

@@ -208,7 +208,7 @@ us_age_distribution <- function(year = 2025) {
 #'
 #' Each Epistorm-Mix matrix is re-weighted so contacts with group `j` scale
 #' with the city's share of `j` relative to the U.S. share, and then made
-#' reciprocal with `measles::make_cmat_symmetric()`.
+#' reciprocal by averaging total contacts in each direction.
 #' @param pop Group sizes (from `city_population()`).
 #' @return A list with one matrix per setting plus `Total`.
 contact_matrices <- function(pop) {
@@ -220,7 +220,7 @@ contact_matrices <- function(pop) {
     X   = settings,
     FUN = function(s) {
       m <- t(t(read_epistorm_matrix(s)) * w)
-      m <- measles::make_cmat_symmetric(m, as.numeric(pop))
+      m <- symmetric_contacts(m, as.numeric(pop))
       dimnames(m) <- list(names(pop), names(pop))
       m
     }
@@ -230,6 +230,32 @@ contact_matrices <- function(pop) {
   ans$Total <- Reduce(`+`, ans)
   ans
 
+}
+
+#' Make contact totals reciprocal between population groups
+#'
+#' Average the total contacts in both directions before converting them back
+#' to per-person rates. This is the calculation used by
+#' `measles::make_cmat_symmetric()` at commit
+#' `d1e87fed204ebe820620759fa1b85cdb9d2e0b03`.
+#' @param matrix Numeric square matrix of per-person contact rates.
+#' @param pop Positive population sizes, one for each row and column.
+#' @return A numeric matrix of reciprocal per-person contact rates.
+symmetric_contacts <- function(matrix, pop) {
+
+  stopifnot(
+    is.matrix(matrix),
+    is.numeric(matrix),
+    is.numeric(pop),
+    length(pop) > 0,
+    nrow(matrix) == length(pop),
+    ncol(matrix) == length(pop),
+    all(is.finite(pop) & pop > 0)
+  )
+
+  # Average the total contacts, then restore each row's per-person rate.
+  total <- matrix * pop
+  (total + t(total)) / 2 / pop
 }
 
 #' Contact matrix under the school-age intervention

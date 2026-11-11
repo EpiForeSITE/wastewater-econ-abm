@@ -21,6 +21,20 @@ p <- measles_ww_params(
 )
 setup <- do.call(layered_setup, c(list(p = p), salt_lake_inputs(p$n)))
 model <- build_model(p, setup)
+
+# Reweighting preserves reciprocal contact totals between unequal groups.
+contacts <- matrix(c(2, 4, 1, 3), nrow = 2, byrow = TRUE)
+population_sizes <- c(100, 200)
+reciprocal <- symmetric_contacts(contacts, population_sizes)
+stopifnot(
+  isTRUE(all.equal(
+    reciprocal * population_sizes,
+    t(reciprocal * population_sizes)
+  )),
+  reciprocal[1, 2] == 3,
+  reciprocal[2, 1] == 1.5
+)
+
 stopifnot(
   inherits(epiworldR::get_layer(model, "community"), "epiworld_layer_mixing"),
   inherits(epiworldR::get_layer(model, "schools"), "epiworld_layer_mixing")
