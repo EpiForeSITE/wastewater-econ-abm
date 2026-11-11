@@ -28,9 +28,9 @@ shedding_kernel <- function(
 
   tau <- 0:t_end
   lv  <- ifelse(
-    tau <= t_peak,
-    log10_vpeak * tau / t_peak,
-    log10_vpeak * (1 - (tau - t_peak) / (t_end - t_peak))
+    test = tau <= t_peak,
+    yes  = log10_vpeak * tau / t_peak,
+    no   = log10_vpeak * (1 - (tau - t_peak) / (t_end - t_peak))
   )
 
   s <- 10^lv

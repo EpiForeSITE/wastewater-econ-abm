@@ -14,7 +14,9 @@ Install `epiworldR` from the `v1-layers` commit used here and install
 `multigroup.vaccine`, `measles`, `data.table`, and `remotes`:
 
 ```r
-remotes::install_github("UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51")
+remotes::install_github(
+  "UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51"
+)
 ```
 
 From the repository root, run `Rscript analysis/run-layered-example.R` for a
@@ -26,7 +28,8 @@ the code. A UTF-8 locale may be required to read the Census files.
 
 The 2025 county age distribution comes from Census data supplied by
 `multigroup.vaccine`. School assignments use Utah school records and 2023 ACS
-district residential populations, as documented in [data/utah](data/utah/README.md).
+district residential populations, as documented in
+[data/utah](data/utah/README.md).
 These are approximate assignments, not observed enrollment; five-year age
 bands are used as proxies for school levels. Every agent participates in the
 community layer, and assigned students also participate in one school group.
@@ -50,12 +53,16 @@ respectively. Lessler et al. estimate exposure to first symptoms, so applying
 that shape and SD to exposure to infectiousness is an approximation; the
 prodromal SD comes from a Hagelloch data fit and the rash SD is an assumption.
 See [Lessler et al. (2009)](https://doi.org/10.1016/S1473-3099(09)70069-6)
-and the [measles parameter documentation](https://uofuepibio.github.io/measles/articles/parameters.html).
+and the [measles parameter documentation][measles-parameters].
+
+[measles-parameters]:
+  https://uofuepibio.github.io/measles/articles/parameters.html
 
 The layer engine currently accepts only zero or full stage contact weights.
 To approximate reduced rash contact, a fraction of rash cases is selected for
 isolation through a global event. Isolation takes effect after the event and
-entry into the isolated stage draws a new rash duration. This is an approximation
+entry into the isolated stage draws a new rash duration. This is an
+approximation
 and does not precisely preserve each individual's rash duration or partial
 contacts. Hospitalization competes with rash recovery. The wastewater model
 uses the existing shedding curve and assumes that the whole simulated
@@ -96,13 +103,22 @@ wastewater non-detections count as missed outbreaks.
 
 ```{r}
 #| echo: false
-calibration <- rbindlist(lapply(names(results), function(coverage) {
-  x <- results[[coverage]]
-  data.table(nonstudent_coverage = paste0(100 * as.numeric(coverage), "%"),
-             simulated_R0 = x$R0_sim, intervention_R = x$R_int,
-             wastewater_threshold = x$calibration$threshold,
-             baseline_outbreak_pct = x$summary[scenario == "baseline", pct_outbreak])
-}))
+# Summarize calibration and outbreak frequency for each application scenario.
+calibration <- rbindlist(
+  lapply(
+    X   = names(results),
+    FUN = function(coverage) {
+      x <- results[[coverage]]
+      data.table(
+        nonstudent_coverage   = paste0(100 * as.numeric(coverage), "%"),
+        simulated_R0          = x$R0_sim,
+        intervention_R        = x$R_int,
+        wastewater_threshold  = x$calibration$threshold,
+        baseline_outbreak_pct = x$summary[scenario == "baseline", pct_outbreak]
+      )
+    }
+  )
+)
 tab(calibration, 2)
 ```
 
@@ -115,13 +131,21 @@ row's trigger-related quantities are not applicable.
 
 ```{r}
 #| echo: false
-summary_table <- rbindlist(lapply(names(results), function(coverage) {
-  x <- copy(results[[coverage]]$summary)
-  x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
-  x[scenario == "baseline", lead_median := NA_real_]
-  x[, .(nonstudent_coverage, scenario, nsims, pct_trigger, trigger_day,
-        final_size, final_q25, final_q75, averted, lead_median)]
-}))
+# Combine paired scenario summaries and label coverage explicitly.
+summary_table <- rbindlist(
+  lapply(
+    X   = names(results),
+    FUN = function(coverage) {
+      x <- copy(results[[coverage]]$summary)
+      x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
+      x[scenario == "baseline", lead_median := NA_real_]
+      x[, .(
+        nonstudent_coverage, scenario, nsims, pct_trigger, trigger_day,
+        final_size, final_q25, final_q75, averted, lead_median
+      )]
+    }
+  )
+)
 tab(summary_table, 1)
 ```
 
@@ -135,7 +159,9 @@ outbreak.
 #| fig-height: 4
 #| echo: false
 curves <- rbindlist(lapply(results, `[[`, "curves"))
-curves[, coverage := paste0(100 * as.numeric(coverage), "% non-student coverage")]
+curves[, coverage := paste0(
+  100 * as.numeric(coverage), "% non-student coverage"
+)]
 ggplot(curves, aes(day, new_inf, color = scenario)) +
   geom_line() + facet_wrap(~ coverage, scales = "free_y") +
   labs(x = "Simulation day", y = "Mean new infections", color = "Scenario") +
@@ -153,12 +179,20 @@ reference trigger.
 ```{r}
 #| echo: false
 sensitivity <- function(field, variable) {
-  rbindlist(lapply(names(results), function(coverage) {
-    x <- copy(results[[coverage]][[field]])
-    x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
-    x[, c("nonstudent_coverage", variable, "nsims", "pct_trigger", "trigger_day",
-          "final_size", "averted", "lead_median"), with = FALSE]
-  }))
+  rbindlist(
+    lapply(
+      X   = names(results),
+      FUN = function(coverage) {
+        x <- copy(results[[coverage]][[field]])
+        x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
+        columns <- c(
+          "nonstudent_coverage", variable, "nsims", "pct_trigger",
+          "trigger_day", "final_size", "averted", "lead_median"
+        )
+        x[, columns, with = FALSE]
+      }
+    )
+  )
 }
 ```
 

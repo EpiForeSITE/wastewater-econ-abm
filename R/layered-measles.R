@@ -22,8 +22,11 @@ layered_measles <- function(
     school_probability,
     vaccinated = integer()
 ) {
-  stopifnot(length(population$age_group) == p$n,
-            length(population$school) == p$n)
+  stopifnot(
+    length(population$age_group) == p$n,
+    length(population$school) == p$n
+  )
+
   # Define disease stages and their progression using the model builder.
   virus <- virus(name = "Measles") |>
     add_stage(label = "Susceptible") |>
@@ -108,7 +111,10 @@ layered_measles <- function(
     ) |>
     add_virus(virus = virus, assign = assign_count(n = p$n_seed)) |>
     add_globalevent(
-      event = rash_isolation_event(n = p$n, probability = p$rash_reduction_contact_rate)
+      event = rash_isolation_event(
+        n           = p$n,
+        probability = p$rash_reduction_contact_rate
+      )
     )
 
   # Apply MMR protection to the supplied agents.
@@ -121,7 +127,10 @@ layered_measles <- function(
       death_reduction          = 0
     )
     model <- model |>
-      add_tool(tool = vaccine, assign = assign_agents(ids = as.integer(vaccinated)))
+      add_tool(
+        tool   = vaccine,
+        assign = assign_agents(ids = as.integer(vaccinated))
+      )
   }
   model
 }
@@ -135,15 +144,19 @@ layered_measles <- function(
 #' @param probability Probability of selecting a rash case for isolation.
 #' @return An epiworldR global event.
 rash_isolation_event <- function(n, probability) {
+  # Track rash onsets separately for each simulation run.
   was_rash <- rep(FALSE, n)
   isolate <- function(m) {
     if (today(m) == 1) was_rash[] <<- FALSE
+
+    # Draw isolation only for agents newly observed with rash.
     current <- get_agents_stages(m) == "Rash"
     new <- which(current & !was_rash)
     was_rash[new] <<- TRUE
     chosen <- new[stats::runif(length(new)) < probability]
     for (i in chosen) fire(m, "Isolate rash", i - 1L)
   }
+
   globalevent_fun(isolate, name = "Rash isolation", day = -99)
 }
 
@@ -190,7 +203,7 @@ layered_setup <- function(
     schools,
     weights,
     cm,
-    school_contacts  = 4,
+    school_contacts = 4,
     community_scale = 0.2
 ) {
   # Construct agent memberships from the application inputs.
@@ -203,8 +216,8 @@ layered_setup <- function(
   # Scale community contacts and cap within-school probabilities.
   community <- (cm$Household + cm$Work + cm$Other) * community_scale
   sizes <- tabulate(
-    bin    = persons$school + 1L,
-    nbins  = length(unique(schools$id))
+    bin   = persons$school + 1L,
+    nbins = length(unique(schools$id))
   )
   school_prob <- pmin(1, school_contacts / pmax(1, sizes - 1L))
 

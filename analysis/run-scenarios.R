@@ -15,7 +15,8 @@ run_batch <- function(...) run_scenarios(..., runner = run_replicate)
 
 nsims        <- 400
 cores        <- max(1, parallel::detectCores() - 1)
-coverages    <- c(0, 0.85) # Non-students; students use school-specific MMR rates
+# Non-student coverage; students use their schools' MMR rates.
+coverages    <- c(0, 0.85)
 lab_delays   <- c(0, 1, 3, 5, 7, 10)
 # WW sampling schedules (days of the week, t %% 7)
 sampling_schedules <- list(
@@ -59,22 +60,26 @@ summarise_runs <- function(
     runs <- merge(runs, case_days, by = "sim")
     runs[, lead := as.numeric(t_cases) - as.numeric(trigger_day)]
   } else {
-    runs[, lead := vapply(base_daily, function(d) {
-      tr <- offline_triggers(d, p)
-      tr$t_cases - tr$t_ww
-    }, numeric(1))]
+    runs[, lead := vapply(
+      X         = base_daily,
+      FUN       = function(d) {
+        tr <- offline_triggers(d, p)
+        tr$t_cases - tr$t_ww
+      },
+      FUN.VALUE = numeric(1)
+    )]
   }
 
   at_trigger <- function(d, t, f) if (is.na(t)) NA_real_ else f(d, t)
 
   runs[, infected_at_trigger := mapply(
-    at_trigger,
+    FUN = at_trigger,
     daily,
     trigger_day,
     MoreArgs = list(f = function(d, t) d$cum_inf[t])
   )]
   runs[, reported_at_trigger := mapply(
-    at_trigger,
+    FUN = at_trigger,
     daily,
     trigger_day,
     MoreArgs = list(f = function(d, t) sum(d$reported[seq_len(t)]))
@@ -108,8 +113,11 @@ mean_curve <- function(runs, label) {
     new_inf = daily[[1]]$new_inf,
     ww_true = daily[[1]]$ww_true
   ), by = .(sim, scenario)]
-  x[, .(new_inf = mean(new_inf), ww_true = mean(ww_true)), by = .(scenario, day)][
-    , coverage := label][]
+  ans <- x[, .(
+    new_inf = mean(new_inf),
+    ww_true = mean(ww_true)
+  ), by = .(scenario, day)]
+  ans[, coverage := label][]
 }
 
 results <- list()
@@ -129,20 +137,25 @@ for (cov in coverages) {
   p$trigger_ww <- cal$threshold
 
   triggered <- run_batch(
-    p,
-    setup,
-    nsims,
-    c("wastewater", "cases"),
-    cores = cores
+    p         = p,
+    setup     = setup,
+    nsims     = nsims,
+    scenarios = c("wastewater", "cases"),
+    cores     = cores
   )
 
   # Sensitivity: WW lab turnaround time (threshold kept fixed)
-  lab <- rbindlist(lapply(lab_delays, function(ld) {
-    pl  <- utils::modifyList(p, list(ww_lab_delay = ld))
-    out <- run_batch(pl, setup, nsims, "wastewater", cores = cores)
-    s   <- summarise_runs(out, baseline, pl)
-    s[, ww_lab_delay := ld][]
-  }))
+  lab <- rbindlist(
+    lapply(
+      X   = lab_delays,
+      FUN = function(ld) {
+        pl  <- utils::modifyList(p, list(ww_lab_delay = ld))
+        out <- run_batch(pl, setup, nsims, "wastewater", cores = cores)
+        s   <- summarise_runs(out, baseline, pl)
+        s[, ww_lab_delay := ld][]
+      }
+    )
+  )
 
   # Sensitivity: WW sampling frequency (threshold kept fixed). The WW
   # measurement error is drawn every day (see add_surveillance()), so the
@@ -150,15 +163,20 @@ for (cov in coverages) {
   # The baseline WW series uses the default schedule, so the lead is paired
   # with the case-based trigger of the main runs instead.
   case_days <- triggered[scenario == "cases", .(sim, t_cases = trigger_day)]
-  sampling <- rbindlist(lapply(names(sampling_schedules), function(k) {
-    ps  <- utils::modifyList(
-      p,
-      list(ww_sampling_days = sampling_schedules[[k]])
+  sampling <- rbindlist(
+    lapply(
+      X   = names(sampling_schedules),
+      FUN = function(k) {
+        ps  <- utils::modifyList(
+          x   = p,
+          val = list(ww_sampling_days = sampling_schedules[[k]])
+        )
+        out <- run_batch(ps, setup, nsims, "wastewater", cores = cores)
+        s   <- summarise_runs(out, baseline, ps, case_days = case_days)
+        s[, samples_per_week := as.integer(k)][]
+      }
     )
-    out <- run_batch(ps, setup, nsims, "wastewater", cores = cores)
-    s   <- summarise_runs(out, baseline, ps, case_days = case_days)
-    s[, samples_per_week := as.integer(k)][]
-  }))
+  )
 
   # Sensitivity: probability of detecting a case during the rash period.
   # The WW threshold stays at its calibrated value, so only the case-based
@@ -166,28 +184,39 @@ for (cov in coverages) {
   # add_surveillance()), so WW trigger days do not depend on the detection
   # probability and the lead is paired with the main WW runs.
   ww_days <- triggered[scenario == "wastewater", .(sim, t_ww = trigger_day)]
-  report <- rbindlist(lapply(report_probs, function(rp) {
-    pr  <- utils::modifyList(p, list(case_report_prob = rp))
-    out <- run_batch(pr, setup, nsims, "cases", cores = cores)
-    s   <- summarise_runs(out, baseline, pr, ww_days = ww_days)
-    s[, case_report_prob := rp][]
-  }))
+  report <- rbindlist(
+    lapply(
+      X   = report_probs,
+      FUN = function(rp) {
+        pr  <- utils::modifyList(p, list(case_report_prob = rp))
+        out <- run_batch(pr, setup, nsims, "cases", cores = cores)
+        s   <- summarise_runs(out, baseline, pr, ww_days = ww_days)
+        s[, case_report_prob := rp][]
+      }
+    )
+  )
 
   # Trigger-time diagnostics on the baseline trajectories
-  diag <- rbindlist(lapply(baseline$daily, function(d) {
-    tr <- offline_triggers(d, p)
-    data.table(
-      t_cases         = tr$t_cases,
-      t_ww            = tr$t_ww,
-      seen_cases      = tr$seen_cases,
-      seen_ww         = tr$seen_ww,
-      reported_at_ww  = if (is.na(tr$t_ww)) NA_real_ else
-        sum(d$reported[seq_len(tr$t_ww)]),
-      infected_at_ww  = if (is.na(tr$t_ww)) NA_real_ else d$cum_inf[tr$t_ww],
-      infected_at_cas = if (is.na(tr$t_cases)) NA_real_ else
-        d$cum_inf[tr$t_cases]
+  diag <- rbindlist(
+    lapply(
+      X   = baseline$daily,
+      FUN = function(d) {
+        tr <- offline_triggers(d, p)
+        data.table(
+          t_cases         = tr$t_cases,
+          t_ww            = tr$t_ww,
+          seen_cases      = tr$seen_cases,
+          seen_ww         = tr$seen_ww,
+          reported_at_ww  = if (is.na(tr$t_ww)) NA_real_ else
+            sum(d$reported[seq_len(tr$t_ww)]),
+          infected_at_ww  = if (is.na(tr$t_ww)) NA_real_ else
+            d$cum_inf[tr$t_ww],
+          infected_at_cas = if (is.na(tr$t_cases)) NA_real_ else
+            d$cum_inf[tr$t_cases]
+        )
+      }
     )
-  }))
+  )
 
   results[[as.character(cov)]] <- list(
     params      = p,
@@ -196,9 +225,9 @@ for (cov in coverages) {
     pop         = setup$pop,
     calibration = cal,
     summary     = summarise_runs(
-      rbind(baseline, triggered),
-      baseline,
-      p
+      runs     = rbind(baseline, triggered),
+      baseline = baseline,
+      p        = p
     ),
     lab_delay   = lab,
     sampling    = sampling,

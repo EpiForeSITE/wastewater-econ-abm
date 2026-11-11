@@ -6,7 +6,7 @@
 #' @return A data frame with one row per argument of `measles_ww_params()`.
 ww_parameters <- function(file = file.path("data", "parameters.csv")) {
   utils::read.csv(
-    file,
+    file         = file,
     colClasses   = "character",
     na.strings   = character(0),
     fileEncoding = "UTF-8"
@@ -18,15 +18,20 @@ ww_parameters <- function(file = file.path("data", "parameters.csv")) {
 #' @return A data frame with the display columns; URLs become Markdown links.
 format_ww_parameters <- function(x) {
 
-  links <- vapply(strsplit(x$doi_or_url, "; ", fixed = TRUE), function(u) {
-    if (length(u) == 0) return("")
-    paste0(" ", paste0("[[", seq_along(u), "]](", u, ")", collapse = " "))
-  }, character(1))
+  # Format each parameter's source URLs as Markdown links.
+  links <- vapply(
+    X         = strsplit(x$doi_or_url, "; ", fixed = TRUE),
+    FUN       = function(u) {
+      if (length(u) == 0) return("")
+      paste0(" ", paste0("[[", seq_along(u), "]](", u, ")", collapse = " "))
+    },
+    FUN.VALUE = character(1)
+  )
 
   range <- ifelse(
-    x$lit_low == "" & x$lit_high == "",
-    "",
-    paste0(x$lit_low, "–", x$lit_high)
+    test = x$lit_low == "" & x$lit_high == "",
+    yes  = "",
+    no   = paste0(x$lit_low, "–", x$lit_high)
   )
 
   data.frame(

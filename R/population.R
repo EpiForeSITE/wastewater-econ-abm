@@ -14,15 +14,21 @@ settings <- c("Household", "School", "Work", "Other")
 #'
 #' Shares are within school districts, not across the county. They must be
 #' combined with district population estimates before assigning students.
-utah_schools <- function(county = "Salt Lake", path =
-    "data/utah/school_district_schoolID_data_Utah_2025.csv") {
+utah_schools <- function(
+    county = "Salt Lake",
+    path   = "data/utah/school_district_schoolID_data_Utah_2025.csv"
+) {
+  # Load the requested county and check the school-record schema.
   x <- utils::read.csv(path, stringsAsFactors = FALSE)
   x <- x[x$county == county, , drop = FALSE]
   if (!nrow(x)) stop("No schools found for county: ", county)
-  if (anyNA(x[c("id", "schooldistrictlocation", "level", "popfrac", "vaxrate")]) ||
+
+  columns <- c("id", "schooldistrictlocation", "level", "popfrac", "vaxrate")
+  if (anyNA(x[columns]) ||
       anyDuplicated(x[c("id", "level")]) || any(!x$level %in% 1:3) ||
       any(x$popfrac < 0) || any(x$vaxrate < 0 | x$vaxrate > 1))
     stop("Invalid school records")
+
   x
 }
 
@@ -32,17 +38,33 @@ utah_schools <- function(county = "Salt Lake", path =
 #' school fractions are shares of the district school-age population. This
 #' assumes the five district boundaries cover the county and that a school's
 #' district-level share applies to its resident students.
-utah_school_weights <- function(schools = utah_schools(), path =
-    "data/utah/acs_Utah_2023_school_districts.csv") {
+utah_school_weights <- function(
+    schools = utah_schools(),
+    path    = "data/utah/acs_Utah_2023_school_districts.csv"
+) {
+  # Match the source districts to their ACS population columns.
   acs <- utils::read.csv(path, check.names = FALSE, fileEncoding = "UTF-8-BOM")
   district <- unique(schools$schooldistrictlocation)
-  labels <- ifelse(district == "SALT LAKE", "Salt Lake City", tools::toTitleCase(tolower(district)))
+  labels <- ifelse(
+    test = district == "SALT LAKE",
+    yes  = "Salt Lake City",
+    no   = tools::toTitleCase(tolower(district))
+  )
   cols <- paste0(labels, " School District, UT")
   if (any(!cols %in% names(acs))) stop("Missing district in ACS data")
+  # Weight school shares by each district's school-age population.
   ages <- as.numeric(acs[[1]])
-  population <- vapply(cols, function(col) sum(acs[[col]][ages %in% c(5, 10, 15, 16)]), numeric(1))
-  if (anyNA(population) || any(population <= 0)) stop("Invalid ACS district population")
-  weights <- population[match(schools$schooldistrictlocation, district)] * schools$popfrac
+  population <- vapply(
+    X         = cols,
+    FUN       = function(col) sum(acs[[col]][ages %in% c(5, 10, 15, 16)]),
+    FUN.VALUE = numeric(1)
+  )
+  if (anyNA(population) || any(population <= 0)) {
+    stop("Invalid ACS district population")
+  }
+  weights <- population[match(schools$schooldistrictlocation, district)] *
+    schools$popfrac
+
   weights / sum(weights)
 }
 
@@ -65,7 +87,10 @@ assign_schools <- function(
     attendance = c(0, 1, 1, 3 / 5, rep(0, 12))
 ) {
   # Assign school levels using caller-supplied age-band attendance rules.
-  stopifnot(length(age_levels) == length(pop), length(attendance) == length(pop))
+  stopifnot(
+    length(age_levels) == length(pop),
+    length(attendance) == length(pop)
+  )
   ages <- rep(seq_along(pop), pop)
   level <- rep(NA_integer_, length(ages))
   for (g in seq_along(pop)) {
@@ -91,8 +116,12 @@ assign_schools <- function(
     )]
   }
   school_id <- match(schools$id[row], unique(schools$id)) - 1L
-  list(age_group = ages - 1L, school = school_id,
-       coverage = schools$vaxrate[row], school_row = row)
+  list(
+    age_group  = ages - 1L,
+    school     = school_id,
+    coverage   = schools$vaxrate[row],
+    school_row = row
+  )
 }
 
 #' Read an Epistorm-Mix setting-specific M-matrix
@@ -101,7 +130,7 @@ assign_schools <- function(
 read_epistorm_matrix <- function(setting, path = "data/epistorm") {
 
   x <- utils::read.csv(
-    file.path(path, sprintf("%s-M-by5_75-matrix.csv", setting)),
+    file        = file.path(path, sprintf("%s-M-by5_75-matrix.csv", setting)),
     check.names = FALSE
   )
 
@@ -155,18 +184,20 @@ city_population <- function(
 #' @param year Census estimate year.
 us_age_distribution <- function(year = 2025) {
 
-  us <- utils::read.csv(system.file(
-    "extdata",
-    sprintf("nc-est%d-agesex-res.csv", year),
-    package = "multigroup.vaccine"
-  ))
+  us <- utils::read.csv(
+    file = system.file(
+      "extdata",
+      sprintf("nc-est%d-agesex-res.csv", year),
+      package = "multigroup.vaccine"
+    )
+  )
 
   # SEX == 0 is both sexes; AGE 999 is the total row
   us  <- us[us$SEX == 0 & us$AGE < 999, ]
   pop <- tapply(
-    us[[sprintf("POPESTIMATE%d", year)]],
-    findInterval(us$AGE, age_limits),
-    sum
+    X     = us[[sprintf("POPESTIMATE%d", year)]],
+    INDEX = findInterval(us$AGE, age_limits),
+    FUN   = sum
   )
 
   as.numeric(pop / sum(pop))
@@ -184,12 +215,16 @@ contact_matrices <- function(pop) {
 
   w <- (pop / sum(pop)) / us_age_distribution()
 
-  ans <- lapply(settings, function(s) {
-    m <- t(t(read_epistorm_matrix(s)) * w)
-    m <- measles::make_cmat_symmetric(m, as.numeric(pop))
-    dimnames(m) <- list(names(pop), names(pop))
-    m
-  })
+  # Reweight and symmetrize each setting's contacts.
+  ans <- lapply(
+    X   = settings,
+    FUN = function(s) {
+      m <- t(t(read_epistorm_matrix(s)) * w)
+      m <- measles::make_cmat_symmetric(m, as.numeric(pop))
+      dimnames(m) <- list(names(pop), names(pop))
+      m
+    }
+  )
   names(ans) <- settings
 
   ans$Total <- Reduce(`+`, ans)
@@ -212,9 +247,9 @@ intervention_matrix <- function(
 ) {
 
   involved <- outer(
-    rownames(cm$Total) %in% school_groups,
-    rownames(cm$Total) %in% school_groups,
-    `|`
+    X   = rownames(cm$Total) %in% school_groups,
+    Y   = rownames(cm$Total) %in% school_groups,
+    FUN = `|`
   )
 
   outside <- cm$School + cm$Work + cm$Other

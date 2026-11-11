@@ -83,19 +83,28 @@ calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
   unvaccinated <- setup
   unvaccinated$vaccinated <- integer()
   estimate <- function(x) {
-    mean(vapply(seq_len(reps), function(seed) {
-      m <- build_model(p, x)
-      epiworldR::run(m, ndays = 60, seed = seed)
-      rt <- as.data.frame(epiworldR::get_reproductive_number(m))
-      sum(rt$rt[rt$source_exposure_date == 0]) / n_seed
-    }, numeric(1)))
+    # Estimate each seed's secondary infections in a susceptible population.
+    values <- vapply(
+      X         = seq_len(reps),
+      FUN       = function(seed) {
+        m <- build_model(p, x)
+        epiworldR::run(m, ndays = 60, seed = seed)
+        rt <- as.data.frame(epiworldR::get_reproductive_number(m))
+        sum(rt$rt[rt$source_exposure_date == 0]) / n_seed
+      },
+      FUN.VALUE = numeric(1)
+    )
+    mean(values)
   }
   for (i in seq_len(iter)) {
     r <- estimate(unvaccinated)
     if (!is.finite(r) || r <= 0) stop("R0 calibration produced no transmission")
     factor <- p$R0 / r
     unvaccinated$community <- unvaccinated$community * factor
-    unvaccinated$school_probability <- pmin(1, unvaccinated$school_probability * factor)
+    unvaccinated$school_probability <- pmin(
+      1,
+      unvaccinated$school_probability * factor
+    )
   }
   setup$community <- unvaccinated$community
   setup$school_probability <- unvaccinated$school_probability
@@ -108,8 +117,13 @@ calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
 
 #' Build the two-layer measles model used by all scenarios
 build_model <- function(p, setup) {
-  model <- layered_measles(p, setup$persons, setup$community,
-                           setup$school_probability, setup$vaccinated)
+  model <- layered_measles(
+    p                  = p,
+    population         = setup$persons,
+    community_matrix   = setup$community,
+    school_probability = setup$school_probability,
+    vaccinated         = setup$vaccinated
+  )
   epiworldR::verbose_off(model)
   model
 }
@@ -131,8 +145,11 @@ add_surveillance <- function(m, p, setup, scenario, state) {
   sdlog   <- log(10) * p$ww_log10_g_sd
 
   reset <- function() {
-    for (v in c("new_inf", "new_prod", "new_rash", "cohort_g", "ww_true",
-                "cum_inf", "cum_prod", "cum_rash"))
+    variables <- c(
+      "new_inf", "new_prod", "new_rash", "cohort_g", "ww_true",
+      "cum_inf", "cum_prod", "cum_rash"
+    )
+    for (v in variables)
       assign(v, numeric(n_days), envir = state)
     state$reported    <- numeric(n_days + p$case_report_delay)
     state$ww_obs      <- rep(NA_real_, n_days)
@@ -150,9 +167,14 @@ add_surveillance <- function(m, p, setup, scenario, state) {
     tot <- epiworldR::get_today_total(m)
     if (is.data.frame(tot)) {
       counts <- tapply(tot$counts, tot$stage, sum)
-      tot <- c(Susceptible = 0, `Quarantined Susceptible` = 0,
-               Latent = 0, `Quarantined Latent` = 0,
-               Prodromal = 0, `Quarantined Prodromal` = 0)
+      tot <- c(
+        Susceptible               = 0,
+        `Quarantined Susceptible` = 0,
+        Latent                    = 0,
+        `Quarantined Latent`      = 0,
+        Prodromal                 = 0,
+        `Quarantined Prodromal`   = 0
+      )
       tot[names(counts)] <- counts
     }
     cum <- c(
@@ -216,8 +238,11 @@ add_surveillance <- function(m, p, setup, scenario, state) {
     if (fire) {
       state$trigger_day <- t
       if (!is.null(setup$school_probability)) {
-        epiworldR::set_contact_prob(epiworldR::get_layer(m, "schools"),
-          setup$school_probability * (1 - p$school_contact_reduction))
+        epiworldR::set_contact_prob(
+          layer        = epiworldR::get_layer(m, "schools"),
+          contact_prob = setup$school_probability *
+            (1 - p$school_contact_reduction)
+        )
       } else {
         epiworldR::set_contact_matrix(m, setup$cm_int)
       }
@@ -228,8 +253,8 @@ add_surveillance <- function(m, p, setup, scenario, state) {
   }
 
   epiworldR::add_globalevent(
-    m,
-    epiworldR::globalevent_fun(fun, name = "Surveillance", day = -99)
+    model = m,
+    event = epiworldR::globalevent_fun(fun, name = "Surveillance", day = -99)
   )
 
   # The model holds `fun`, whose environment is this frame, so the frame must
@@ -301,8 +326,10 @@ run_scenarios <- function(
   )
 
   res <- parallel::mclapply(
-    seq_len(nrow(grid)),
-    function(i) runner(p, setup, grid$scenario[i], seed0 + grid$sim[i]),
+    X        = seq_len(nrow(grid)),
+    FUN      = function(i) {
+      runner(p, setup, grid$scenario[i], seed0 + grid$sim[i])
+    },
     mc.cores = cores
   )
 
@@ -311,7 +338,11 @@ run_scenarios <- function(
   ans[, daily := lapply(res, `[[`, "daily")]
   ans[, final_size := vapply(daily, function(d) d$cum_inf[nrow(d)], numeric(1))]
   ans[, reported := vapply(daily, function(d) sum(d$reported), numeric(1))]
-  ans[, peak_day := vapply(daily, function(d) d$day[which.max(d$new_inf)], numeric(1))]
+  ans[, peak_day := vapply(
+    X         = daily,
+    FUN       = function(d) d$day[which.max(d$new_inf)],
+    FUN.VALUE = numeric(1)
+  )]
   ans[]
 
 }

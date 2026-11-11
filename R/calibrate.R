@@ -31,8 +31,10 @@ offline_triggers <- function(d, p, trigger_ww = p$trigger_ww) {
   seen_cases <- if (is.na(t_cases)) NA_real_ else
     d$cum_rash[max(1, t_cases - p$case_report_delay)]
 
-  s_ww <- which(!is.na(d$ww_obs) & d$ww_obs >= trigger_ww &
-    d$day + p$ww_lab_delay <= ndays)[1]
+  s_ww <- which(
+    !is.na(d$ww_obs) & d$ww_obs >= trigger_ww &
+      d$day + p$ww_lab_delay <= ndays
+  )[1]
   seen_ww <- if (is.na(s_ww)) NA_real_ else d$cum_prod[s_ww]
 
   list(
@@ -61,22 +63,26 @@ calibrate_ww_threshold <- function(
   grid <- grid[grid >= p$ww_lod]
 
   seen_cases <- vapply(
-    baseline$daily,
-    function(d) offline_triggers(d, p)$seen_cases,
-    numeric(1)
+    X         = baseline$daily,
+    FUN       = function(d) offline_triggers(d, p)$seen_cases,
+    FUN.VALUE = numeric(1)
   )
   eligible <- !is.na(seen_cases)
   if (!any(eligible))
     stop("The case trigger never fires in the baseline runs.")
   target <- stats::median(seen_cases[eligible])
 
-  seen_ww <- vapply(grid, function(thr) {
-    vapply(
-      baseline$daily[eligible],
-      function(d) offline_triggers(d, p, thr)$seen_ww,
-      numeric(1)
-    )
-  }, numeric(sum(eligible)))
+  seen_ww <- vapply(
+    X         = grid,
+    FUN       = function(thr) {
+      vapply(
+        X         = baseline$daily[eligible],
+        FUN       = function(d) offline_triggers(d, p, thr)$seen_ww,
+        FUN.VALUE = numeric(1)
+      )
+    },
+    FUN.VALUE = numeric(sum(eligible))
+  )
   seen_ww <- matrix(seen_ww, ncol = length(grid))
   seen_ww[is.na(seen_ww)] <- Inf
 

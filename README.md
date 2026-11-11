@@ -13,7 +13,9 @@ Install `epiworldR` from the `v1-layers` commit used here and install
 `multigroup.vaccine`, `measles`, `data.table`, and `remotes`:
 
 ``` r
-remotes::install_github("UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51")
+remotes::install_github(
+  "UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51"
+)
 ```
 
 From the repository root, run `Rscript analysis/run-layered-example.R`
