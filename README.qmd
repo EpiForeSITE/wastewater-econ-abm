@@ -62,15 +62,143 @@ uses the existing shedding curve and assumes that the whole simulated
 population contributes to the catchment. Detection triggers a reduction in
 school contacts; community contacts remain unchanged.
 
-## Results and reproducibility
+## Simulation results
 
-`analysis/results.rds` and the older figures were generated with the previous
-mixing model. They are retained in the [historical report](reports/previous-results.md) and **are not results of
-the current layered model**. Re-run the full scenario script before drawing
-conclusions from its tables or figures. The script is computationally
-intensive and uses 400 replicates per scenario by default.
+The results below use 400 paired simulations per scenario, a population of
+10,000 agents, one initial infection, and 365 days of follow-up. The two
+coverage scenarios set vaccination among non-students to 0% and 85%; school
+coverage remains school-specific in both scenarios. The wastewater threshold
+is calibrated separately for each coverage scenario against the case trigger.
+Agent and vaccination assignments are held fixed across runs; epidemic seeds
+run from 1001 to 1400. An outbreak is a baseline simulation with at least 50
+infections. The outcome
+summaries below are conditional on those baseline outbreaks; the outbreak
+percentage uses all simulations. Scenario pairs share their random seed.
 
-The smaller layered example prints its own results and does not overwrite the
-historical results file. See [data/parameters.csv](data/parameters.csv) for the
-parameter table and sources. The original Epistorm matrices and their source
-are documented in [data/epistorm](data/epistorm/README.md).
+```{r}
+#| include: false
+library(data.table)
+library(ggplot2)
+source("R/parameters.R")
+results <- readRDS("analysis/results.rds")
+tab <- function(x, digits = 1) knitr::kable(as.data.frame(x), digits = digits)
+```
+
+### Calibration and outbreak frequency
+
+The simulated reproduction number is estimated in a fully susceptible
+population. The intervention estimate reduces school contacts only; both
+estimates are subject to Monte Carlo variation. The wastewater threshold is
+chosen so the median number of prodromal cases at sample collection matches
+the median number of rash cases at the clinical report that crosses the case
+threshold. Calibration uses baseline runs in which the case trigger fires;
+wastewater non-detections count as missed outbreaks.
+
+```{r}
+#| echo: false
+calibration <- rbindlist(lapply(names(results), function(coverage) {
+  x <- results[[coverage]]
+  data.table(nonstudent_coverage = paste0(100 * as.numeric(coverage), "%"),
+             simulated_R0 = x$R0_sim, intervention_R = x$R_int,
+             wastewater_threshold = x$calibration$threshold,
+             baseline_outbreak_pct = x$summary[scenario == "baseline", pct_outbreak])
+}))
+tab(calibration, 2)
+```
+
+### Scenario comparison
+
+Infections averted compare each scenario with its paired baseline. Trigger
+day and lead time are medians among runs for which they are defined. Positive
+lead means the wastewater trigger preceded the case trigger. The baseline
+row's trigger-related quantities are not applicable.
+
+```{r}
+#| echo: false
+summary_table <- rbindlist(lapply(names(results), function(coverage) {
+  x <- copy(results[[coverage]]$summary)
+  x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
+  x[scenario == "baseline", lead_median := NA_real_]
+  x[, .(nonstudent_coverage, scenario, nsims, pct_trigger, trigger_day,
+        final_size, final_q25, final_q75, averted, lead_median)]
+}))
+tab(summary_table, 1)
+```
+
+The curves show the mean across all simulations, including introductions
+that do not reach the outbreak threshold; they are not conditional on an
+outbreak.
+
+```{r}
+#| label: fig-layered-curves
+#| fig-width: 8
+#| fig-height: 4
+#| echo: false
+curves <- rbindlist(lapply(results, `[[`, "curves"))
+curves[, coverage := paste0(100 * as.numeric(coverage), "% non-student coverage")]
+ggplot(curves, aes(day, new_inf, color = scenario)) +
+  geom_line() + facet_wrap(~ coverage, scales = "free_y") +
+  labs(x = "Simulation day", y = "Mean new infections", color = "Scenario") +
+  theme_minimal()
+```
+
+### Sensitivity analyses
+
+The wastewater threshold is held at its reference value within each coverage
+scenario. The tables are conditional on baseline outbreaks. Laboratory delay
+and sampling-frequency rows report wastewater-triggered runs; case-detection
+rows report case-triggered runs. Lead times compare each run with its paired
+reference trigger.
+
+```{r}
+#| echo: false
+sensitivity <- function(field, variable) {
+  rbindlist(lapply(names(results), function(coverage) {
+    x <- copy(results[[coverage]][[field]])
+    x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
+    x[, c("nonstudent_coverage", variable, "nsims", "pct_trigger", "trigger_day",
+          "final_size", "averted", "lead_median"), with = FALSE]
+  }))
+}
+```
+
+**Wastewater laboratory delay (days)**
+
+```{r}
+#| echo: false
+tab(sensitivity("lab_delay", "ww_lab_delay"))
+```
+
+**Wastewater sampling frequency (days per week)**
+
+```{r}
+#| echo: false
+tab(sensitivity("sampling", "samples_per_week"))
+```
+
+**Case detection probability**
+
+```{r}
+#| echo: false
+tab(sensitivity("report_prob", "case_report_prob"))
+```
+
+## Parameters and sources
+
+The table gives the defaults for the current model; wastewater thresholds
+shown above are calibrated separately for each coverage scenario.
+
+```{r}
+#| echo: false
+knitr::kable(format_ww_parameters(ww_parameters()), escape = FALSE)
+```
+
+## Reproducibility and limitations
+
+The saved aggregate results are in [analysis/results.rds](analysis/results.rds).
+The previous model's report is retained as a [historical report](reports/previous-results.md).
+See [data/parameters.csv](data/parameters.csv) for the parameter table and
+sources, and [data/epistorm](data/epistorm/README.md) for contact matrices.
+These scenarios use assumptions about school membership, immunity, shedding,
+contact rates and response behavior. They do not constitute forecasts or
+validate wastewater sensitivity against observed Salt Lake County outbreaks.
