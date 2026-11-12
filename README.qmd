@@ -1,256 +1,392 @@
 ---
 title: Measles wastewater surveillance with epiworldR
 format: gfm
+execute:
+  echo: true
+  warning: false
 ---
 
-This project models measles in a synthetic Salt Lake County population with
-community and school contact layers. It compares no surveillance-triggered
-intervention with case and wastewater triggers. The model is an exploratory
-simulation, not an estimate of an actual outbreak.
+This document builds and runs a measles model with community and school
+contact layers. It compares no intervention, an intervention triggered by
+wastewater, and an intervention triggered by reported cases. The model is an
+exploratory simulation, not a forecast.
 
-## Run the model
-
-The local and browser devcontainers install the exact layered epiworldR
-commit and pinned analysis dependencies. Outside the devcontainer, install
-Quarto and the `data.table`, `ggplot2`, `tinytest`, `knitr`, `rmarkdown`,
-and `remotes` R packages, then install the two GitHub packages:
-
-```r
-remotes::install_github(
-  "UofUEpiBio/epiworldR@2f1a5acc7835c44908fab53261d879afc4335e51"
-)
-remotes::install_github(
-  "EpiForeSITE/multigroup-vaccine@ddd9201f28b9908c033542f6a2445b84619af1c7"
-)
-```
-
-The container pins R 4.6.1 and Quarto 1.9.35, uses the 2026-10-20 CRAN
-snapshot, and checks direct package versions and Git commit hashes at build
-time. The version checks are in
+The devcontainer pins epiworldR to commit
+`2f1a5acc7835c44908fab53261d879afc4335e51` and the Census helper package to
+`ddd9201f28b9908c033542f6a2445b84619af1c7`. Its dependency versions are
+checked in
 [.devcontainer/check-dependencies.R](.devcontainer/check-dependencies.R).
+Run `quarto render README.qmd` from the repository root to reproduce the report.
 
-From the repository root, run `Rscript analysis/run-layered-example.R` for a
-single seeded comparison or `Rscript analysis/run-scenarios.R` for the larger
-simulation study. Run `Rscript -e 'tinytest::run_test_dir("tests")'` to check
-the code. A UTF-8 locale may be required to read the Census files.
+## Parameters and population
 
-## Population and contacts
-
-The 2025 county age distribution comes from Census data supplied by
-`multigroup.vaccine`. School assignments use Utah school records and 2023 ACS
-district residential populations, as documented in
-[data/utah](data/utah/README.md).
-These are approximate assignments, not observed enrollment; five-year age
-bands are used as proxies for school levels. Every agent participates in the
-community layer, and assigned students also participate in one school group.
-School MMR coverage is taken from the school data; `prop_vaccinated` sets
-coverage for other agents. A vaccinated agent receives susceptibility
-reduction `vax_efficacy`.
-
-Community contacts use the household, work and other Epistorm-Mix matrices.
-The school layer uses within-school mixing. Simulation scaling can leave small
-school groups unable to achieve their target number of contacts. The setup
-calibrates both layers against simulated transmission in a fully susceptible
-population, including seeded cases with no secondary infections.
-
-## Measles and surveillance
-
-The disease stages are susceptible, latent, prodromal, rash, hospitalized and
-recovered. Latent, prodromal and rash durations are independent lognormal draws
-with means and standard deviations in days, rounded to whole days with a
-minimum of one. Defaults are 10 (SD 2.5), 4 (SD 1.7), and 4 (SD 1),
-respectively. Lessler et al. estimate exposure to first symptoms, so applying
-that shape and SD to exposure to infectiousness is an approximation; the
-prodromal SD comes from a Hagelloch data fit and the rash SD is an assumption.
-See [Lessler et al. (2009)](https://doi.org/10.1016/S1473-3099(09)70069-6)
-and the [measles parameter documentation][measles-parameters].
-
-[measles-parameters]:
-  https://uofuepibio.github.io/measles/articles/parameters.html
-
-The layer engine currently accepts only zero or full stage contact weights.
-To approximate reduced rash contact, a fraction of rash cases is selected for
-isolation through a global event. Isolation takes effect after the event and
-entry into the isolated stage draws a new rash duration. This is an
-approximation
-and does not precisely preserve each individual's rash duration or partial
-contacts. Hospitalization competes with rash recovery. The wastewater model
-uses the existing shedding curve and assumes that the whole simulated
-population contributes to the catchment. Detection triggers a reduction in
-school contacts; community contacts remain unchanged.
-
-## Simulation results
-
-The results below use 400 paired simulations per scenario, a population of
-10,000 agents, one initial infection, and 365 days of follow-up. The two
-coverage scenarios set vaccination among non-students to 0% and 85%; school
-coverage remains school-specific in both scenarios. The wastewater threshold
-is calibrated separately for each coverage scenario against the case trigger.
-Agent and vaccination assignments are held fixed across runs; epidemic seeds
-run from 1001 to 1400. An outbreak is a baseline simulation with at least 50
-infections. The outcome
-summaries below are conditional on those baseline outbreaks; the outbreak
-percentage uses all simulations. Scenario pairs share their random seed.
+The latent, prodromal and rash periods are lognormal draws. Lessler et al.
+([2009](https://doi.org/10.1016/S1473-3099(09)70069-6)) inform the incubation
+standard deviation; the prodromal standard deviation comes from the Hagelloch
+data, and the rash standard deviation is assumed. See
+[data/parameters.csv](data/parameters.csv) for parameter sources.
 
 ```{r}
-#| include: false
+library(epiworldR)
 library(data.table)
 library(ggplot2)
-source("R/parameters.R")
-results <- readRDS("analysis/results.rds")
-tab <- function(x, digits = 1) knitr::kable(as.data.frame(x), digits = digits)
+source("model.R")
+set.seed(137)
+
+p <- list(
+  n                           = 10000,
+  n_seed                      = 1,
+  R0                          = 7,
+  vax_efficacy                = 0.97,
+  transmission_rate           = 0.9,
+  incubation_period           = 10,
+  incubation_period_sd        = 2.5,
+  prodromal_period            = 4,
+  prodromal_period_sd         = 1.7,
+  rash_period                 = 4,
+  rash_period_sd              = 1,
+  rash_reduction_contact_rate = 0.5,
+  prob_hospitalization        = 0.2,
+  hospitalization_period      = 7,
+  ndays                       = 365,
+  ww_t_peak                   = 4,
+  ww_t_end                    = 18,
+  ww_log10_vpeak              = 3,
+  ww_log10_g_mean             = 10,
+  ww_log10_g_sd               = 1,
+  ww_alpha                    = 378500,
+  ww_sigma                    = 0.5,
+  ww_lod                      = 1,
+  ww_sampling_days            = c(1, 3, 5),
+  ww_lab_delay                = 3,
+  case_report_prob            = 0.7,
+  case_report_delay           = 3,
+  trigger_cases               = 5,
+  trigger_ww                  = 1,
+  school_contact_reduction    = 0.8
+)
+# Default to 200 runs; a smaller value is useful while editing the report.
+nsims <- as.integer(Sys.getenv("WASTEWATER_NSIMS", unset = "200"))
+stopifnot(nsims > 0)
 ```
 
-### Calibration and outbreak frequency
-
-The simulated reproduction number is estimated in a fully susceptible
-population. The intervention estimate reduces school contacts only; both
-estimates are subject to Monte Carlo variation. The wastewater threshold is
-chosen so the median number of prodromal cases at sample collection matches
-the median number of rash cases at the clinical report that crosses the case
-threshold. Calibration uses baseline runs in which the case trigger fires;
-wastewater non-detections count as missed outbreaks.
+The application uses Census population estimates for Salt Lake County and
+Utah school records, weighted by district ACS population estimates. Each agent
+is in the community layer; students also join one school. Age groups are
+five-year bands, so school levels and enrollment are approximations. See
+[data/utah/README.md](data/utah/README.md) for the sources and limitations.
 
 ```{r}
-#| echo: false
-# Summarize calibration and outbreak frequency for each application scenario.
-calibration <- rbindlist(
-  lapply(
-    X   = names(results),
-    FUN = function(coverage) {
-      x <- results[[coverage]]
-      data.table(
-        nonstudent_coverage   = paste0(100 * as.numeric(coverage), "%"),
-        simulated_R0          = x$R0_sim,
-        intervention_R        = x$R_int,
-        wastewater_threshold  = x$calibration$threshold,
-        baseline_outbreak_pct = x$summary[scenario == "baseline", pct_outbreak]
+# County age distribution, rounded to the model's population size.
+age_limits <- seq(0, 75, by = 5)
+census_path <- system.file(
+  "extdata", "cc-est2025-syasex-49.csv", package = "multigroup.vaccine"
+)
+census <- multigroup.vaccine::getCensusData(
+  state_fips  = "49",
+  county_name = "Salt Lake County",
+  year        = 2025,
+  age_groups  = age_limits,
+  csv_path    = census_path
+)
+shares <- census$age_pops / sum(census$age_pops)
+pop <- floor(shares * p$n)
+remaining <- p$n - sum(pop)
+if (remaining > 0) {
+  extra <- order(shares * p$n - pop, decreasing = TRUE)[seq_len(remaining)]
+  pop[extra] <- pop[extra] + 1
+}
+
+# Reweight national setting-specific matrices and make contacts reciprocal.
+us_path <- system.file(
+  "extdata", "nc-est2025-agesex-res.csv", package = "multigroup.vaccine"
+)
+us <- read.csv(us_path)
+us <- us[us$SEX == 0 & us$AGE < 999, ]
+us_pop <- tapply(us$POPESTIMATE2025, findInterval(us$AGE, age_limits), sum)
+weights <- (pop / sum(pop)) / as.numeric(us_pop / sum(us_pop))
+settings <- c("Household", "Work", "Other")
+community <- matrix(0, nrow = length(pop), ncol = length(pop))
+for (setting in settings) {
+  path <- file.path("data/epistorm", paste0(setting, "-M-by5_75-matrix.csv"))
+  matrix_data <- read.csv(path, check.names = FALSE)
+  contacts <- as.matrix(matrix_data[, -1])
+  contacts <- t(t(contacts) * weights)
+  total <- contacts * as.numeric(pop)
+  community <- community + (total + t(total)) / 2 / as.numeric(pop)
+}
+community <- community * 0.2
+
+# Weight each school's within-district share by ACS district population.
+schools <- read.csv(
+  "data/utah/school_district_schoolID_data_Utah_2025.csv"
+)
+schools <- schools[schools$county == "Salt Lake", ]
+acs <- read.csv(
+  "data/utah/acs_Utah_2023_school_districts.csv",
+  check.names  = FALSE,
+  fileEncoding = "UTF-8-BOM"
+)
+district <- unique(schools$schooldistrictlocation)
+labels <- ifelse(
+  test = district == "SALT LAKE",
+  yes  = "Salt Lake City",
+  no   = tools::toTitleCase(tolower(district))
+)
+columns <- paste0(labels, " School District, UT")
+district_pop <- vapply(
+  X         = columns,
+  FUN       = function(col) sum(acs[[col]][acs[[1]] %in% c(5, 10, 15, 16)]),
+  FUN.VALUE = numeric(1)
+)
+school_weight <- district_pop[match(schools$schooldistrictlocation, district)] *
+  schools$popfrac
+
+# Assign students to schools by age band and retain school MMR coverage.
+age_group <- rep(seq_along(pop) - 1L, pop)
+level <- rep(NA_integer_, p$n)
+level[age_group == 1L] <- 1L
+level[age_group == 2L] <- 2L
+older <- which(age_group == 3L)
+level[older[sample.int(length(older), floor(length(older) * 3 / 5))]] <- 3L
+school_row <- rep(NA_integer_, p$n)
+for (j in 1:3) {
+  students <- which(level == j)
+  choices <- which(schools$level == j)
+  school_row[students] <- choices[sample.int(
+    n       = length(choices),
+    size    = length(students),
+    replace = TRUE,
+    prob    = school_weight[choices]
+  )]
+}
+school_group <- match(schools$id[school_row], unique(schools$id)) - 1L
+sizes <- tabulate(school_group + 1L, nbins = length(unique(schools$id)))
+school_probability <- pmin(1, 4 / pmax(1, sizes - 1L))
+
+# The shedding kernel is normalized to one per prodromal-onset cohort.
+tau <- 0:p$ww_t_end
+log_shedding <- ifelse(
+  test = tau <= p$ww_t_peak,
+  yes  = p$ww_log10_vpeak * tau / p$ww_t_peak,
+  no   = p$ww_log10_vpeak * (p$ww_t_end - tau) / (p$ww_t_end - p$ww_t_peak)
+)
+kernel <- 10^log_shedding
+kernel <- kernel / sum(kernel)
+setup <- list(
+  persons            = list(age_group = age_group, school = school_group),
+  community          = community,
+  school_probability = school_probability,
+  vaccinated         = integer(),
+  kernel             = kernel
+)
+```
+
+## Calibrate contacts
+
+We adjust the two layers together using simulations in a fully susceptible
+population, targeting an average of seven secondary infections per imported
+case. This target is an illustrative assumption below published measles
+estimates. Because the calibration is simulated, the estimate varies.
+
+```{r}
+# Reuse the same fully susceptible population to calibrate both layers.
+cal_p <- p
+cal_p$n_seed <- 10
+cal_p$ndays <- 60
+for (iteration in 1:4) {
+  state <- new.env(parent = emptyenv())
+  model <- build_model(cal_p, setup, state, scenario = "baseline")
+  run_multiple(
+    m        = model,
+    ndays    = cal_p$ndays,
+    nsims    = 50,
+    seed     = 42,
+    saver    = make_saver("reproductive"),
+    nthreads = 1,
+    verbose  = FALSE
+  )
+  reproduction <- run_multiple_get_results(model, nthreads = 1)$reproductive
+  r0 <- sum(
+    reproduction$rt[
+      reproduction$source >= 0 & reproduction$source_exposure_date == 0
+    ]
+  ) / (50 * cal_p$n_seed)
+  if (!is.finite(r0) || r0 <= 0) stop("Calibration produced no transmission")
+  if (iteration < 4) {
+    setup$community <- setup$community * p$R0 / r0
+    setup$school_probability <- pmin(
+      1, setup$school_probability * p$R0 / r0
+    )
+  }
+}
+r0
+```
+
+## Run the scenarios
+
+We run `r nsims` simulations per scenario for each of two non-student
+vaccination rates: 0% and 85%. Students retain their school-specific MMR
+coverage. The same synthetic population and vaccination assignments are held
+fixed within a
+coverage scenario. Vaccination reduces susceptibility by 97%.
+
+The baseline records both wastewater and case surveillance without changing
+contacts. We select the wastewater threshold so the median number of
+prodromal cases at collection matches the median number of rash cases at the
+clinical report crossing the five-case threshold. Non-detections count as
+missed outbreaks. The two intervention scenarios then reduce school contacts
+by 80% when their trigger becomes available. This is a simplified response;
+community contacts stay unchanged.
+
+R global events cannot run in parallel threads, so these `run_multiple()` calls
+use one thread. The simulation seed is the same across scenarios, but R event
+draws use the document's RNG stream; outcomes are not treated as paired.
+
+```{r}
+results <- list()
+histories <- list()
+for (coverage in c(0, 0.85)) {
+  # Keep vaccine assignments fixed within this coverage scenario.
+  vaccine_probability <- schools$vaxrate[school_row]
+  vaccine_probability[is.na(vaccine_probability)] <- coverage
+  setup$vaccinated <- which(runif(p$n) < vaccine_probability) - 1L
+
+  # Run baseline and collect both stage histories and surveillance records.
+  state <- new.env(parent = emptyenv())
+  model <- build_model(p, setup, state, scenario = "baseline")
+  run_multiple(
+    m        = model,
+    ndays    = p$ndays,
+    nsims    = nsims,
+    seed     = 42,
+    saver    = make_saver("total_hist"),
+    nthreads = 1,
+    verbose  = FALSE
+  )
+  baseline_history <- run_multiple_get_results(model, nthreads = 1)$total_hist
+  baseline_runs <- state$runs
+
+  # Compare the cases seen by each surveillance system on eligible runs.
+  case_day <- vapply(
+    X         = baseline_runs,
+    FUN       = function(x) which(cumsum(x$reported) >= p$trigger_cases)[1],
+    FUN.VALUE = integer(1)
+  )
+  eligible <- which(!is.na(case_day))
+  if (!length(eligible)) stop("No baseline run reached the case trigger")
+  seen_cases <- vapply(
+    X         = eligible,
+    FUN       = function(i) baseline_runs[[i]]$cum_rash[
+      max(1, case_day[i] - p$case_report_delay)
+    ],
+    FUN.VALUE = numeric(1)
+  )
+  thresholds <- 10^seq(0, 3, by = 0.05)
+  seen_ww <- vapply(
+    X         = thresholds,
+    FUN       = function(threshold) {
+      vapply(
+        X         = eligible,
+        FUN       = function(i) {
+          x <- baseline_runs[[i]]
+          day <- which(
+            !is.na(x$ww_obs) & x$ww_obs >= threshold &
+              seq_along(x$ww_obs) + p$ww_lab_delay <= p$ndays
+          )[1]
+          if (is.na(day)) Inf else x$cum_prod[day]
+        },
+        FUN.VALUE = numeric(1)
       )
-    }
+    },
+    FUN.VALUE = numeric(length(eligible))
   )
-)
-tab(calibration, 2)
+  medians <- apply(matrix(seen_ww, ncol = length(thresholds)), 2, median)
+  p$trigger_ww <- thresholds[which.min(abs(medians - median(seen_cases)))]
+
+  # The scenario output uses the native run_multiple saver.
+  for (scenario in c("baseline", "wastewater", "cases")) {
+    if (scenario == "baseline") {
+      history <- baseline_history
+      runs <- baseline_runs
+    } else {
+      state <- new.env(parent = emptyenv())
+      model <- build_model(p, setup, state, scenario = scenario)
+      run_multiple(
+        m        = model,
+        ndays    = p$ndays,
+        nsims    = nsims,
+        seed     = 42,
+        saver    = make_saver("total_hist"),
+        nthreads = 1,
+        verbose  = FALSE
+      )
+      history <- run_multiple_get_results(model, nthreads = 1)$total_hist
+      runs <- state$runs
+    }
+    key <- paste(coverage, scenario, sep = "-")
+    final <- history[history$date == p$ndays &
+                       history$stage == "Susceptible", ]
+    results[[key]] <- data.frame(
+      coverage     = coverage,
+      scenario     = scenario,
+      sim          = final$sim_num,
+      infections   = p$n - final$counts,
+      trigger_day  = vapply(runs, function(x) x$trigger_day, integer(1)),
+      ww_threshold = p$trigger_ww
+    )
+    incidence <- as.data.table(history)[stage == "Latent", .(
+      mean_latent = mean(counts)
+    ), by = date]
+    incidence[, `:=`(coverage = coverage, scenario = scenario)]
+    histories[[key]] <- incidence
+  }
+}
+results <- rbindlist(results)
+histories <- rbindlist(histories)
 ```
 
-### Scenario comparison
+## Results
 
-Infections averted compare each scenario with its paired baseline. Trigger
-day and lead time are medians among runs for which they are defined. Positive
-lead means the wastewater trigger preceded the case trigger. The baseline
-row's trigger-related quantities are not applicable.
+The table summarizes all simulations, including introductions that die out.
+Trigger days are medians among runs that triggered. Differences between
+scenarios are descriptive and do not imply a paired comparison.
 
 ```{r}
 #| echo: false
-# Combine paired scenario summaries and label coverage explicitly.
-summary_table <- rbindlist(
-  lapply(
-    X   = names(results),
-    FUN = function(coverage) {
-      x <- copy(results[[coverage]]$summary)
-      x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
-      x[scenario == "baseline", lead_median := NA_real_]
-      x[, .(
-        nonstudent_coverage, scenario, nsims, pct_trigger, trigger_day,
-        final_size, final_q25, final_q75, averted, lead_median
-      )]
-    }
-  )
-)
-tab(summary_table, 1)
+summary <- results[, .(
+  runs                 = .N,
+  median_infections    = median(infections),
+  infections_q25       = quantile(infections, 0.25),
+  infections_q75       = quantile(infections, 0.75),
+  triggered_pct        = 100 * mean(!is.na(trigger_day)),
+  median_trigger_day   = if (all(is.na(trigger_day))) NA_real_ else
+    as.double(median(trigger_day, na.rm = TRUE)),
+  wastewater_threshold = unique(ww_threshold)
+), by = .(coverage = paste0(100 * coverage, "%"), scenario)]
+knitr::kable(summary, digits = 1)
 ```
 
-The curves show the mean across all simulations, including introductions
-that do not reach the outbreak threshold; they are not conditional on an
-outbreak.
+The curves show the mean number of agents in the latent stage, including runs
+that die out; they are not restricted to large outbreaks.
 
 ```{r}
-#| label: fig-layered-curves
+#| label: fig-simple-latent
 #| fig-width: 8
 #| fig-height: 4
 #| echo: false
-curves <- rbindlist(lapply(results, `[[`, "curves"))
-curves[, coverage := paste0(
-  100 * as.numeric(coverage), "% non-student coverage"
-)]
-ggplot(curves, aes(day, new_inf, color = scenario)) +
-  geom_line() + facet_wrap(~ coverage, scales = "free_y") +
-  labs(x = "Simulation day", y = "Mean new infections", color = "Scenario") +
+histories[, coverage_label := paste0(100 * coverage, "% non-student coverage")]
+ggplot(histories, aes(date, mean_latent, color = scenario)) +
+  geom_line() +
+  facet_wrap(~ coverage_label, scales = "free_y") +
+  labs(x = "Day", y = "Mean latent agents", color = "Scenario") +
   theme_minimal()
 ```
 
-### Sensitivity analyses
-
-The wastewater threshold is held at its reference value within each coverage
-scenario. The tables are conditional on baseline outbreaks. Laboratory delay
-and sampling-frequency rows report wastewater-triggered runs; case-detection
-rows report case-triggered runs. Lead times compare each run with its paired
-reference trigger.
-
-```{r}
-#| echo: false
-sensitivity <- function(field, variable) {
-  rbindlist(
-    lapply(
-      X   = names(results),
-      FUN = function(coverage) {
-        x <- copy(results[[coverage]][[field]])
-        x[, nonstudent_coverage := paste0(100 * as.numeric(coverage), "%")]
-        columns <- c(
-          "nonstudent_coverage", variable, "nsims", "pct_trigger",
-          "trigger_day", "final_size", "averted", "lead_median"
-        )
-        x[, columns, with = FALSE]
-      }
-    )
-  )
-}
-```
-
-**Wastewater laboratory delay (days)**
-
-```{r}
-#| echo: false
-tab(sensitivity("lab_delay", "ww_lab_delay"))
-```
-
-**Wastewater sampling frequency (days per week)**
-
-```{r}
-#| echo: false
-tab(sensitivity("sampling", "samples_per_week"))
-```
-
-**Case detection probability**
-
-```{r}
-#| echo: false
-tab(sensitivity("report_prob", "case_report_prob"))
-```
-
-## Parameters and sources
-
-The table gives the defaults for the current model; wastewater thresholds
-shown above are calibrated separately for each coverage scenario.
-
-```{r}
-#| echo: false
-knitr::kable(format_ww_parameters(ww_parameters()), escape = FALSE)
-```
-
-## Reproducibility and limitations
-
-The saved aggregate results are in [analysis/results.rds](analysis/results.rds).
-Earlier reports and parameters are available in Git history.
-See [data/parameters.csv](data/parameters.csv) for the parameter table and
-sources, and [data/epistorm](data/epistorm/README.md) for contact matrices.
-These scenarios use assumptions about school membership, immunity, shedding,
-contact rates and response behavior. They do not constitute forecasts or
-validate wastewater sensitivity against observed Salt Lake County outbreaks.
-
-Reusable setup accepts explicit population counts, school records, school
-weights, and contact matrices. `salt_lake_inputs()` is the current application
-adapter; other locations supply the same input structure to `build_setup()`.
-Setup functions consume the caller's R RNG stream. Execution scripts initialize
-the stream and reset it at paired-replicate boundaries. The results above were
-generated before this seed-ownership refactor, with the former fixed setup
-seeds; they have not been regenerated for new caller-selected populations.
+School assignments approximate enrollment from district population shares.
+Small simulated schools can have fewer possible contacts than the target.
+The wastewater process assumes the whole modeled population contributes to
+one catchment. The engine accepts zero or full stage contact weights, so a
+random fraction of rash cases enters an isolated stage at the end of the day;
+that transition redraws the rash duration. These are modeling assumptions,
+not estimates validated against observed Salt Lake County outbreaks.

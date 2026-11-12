@@ -14,6 +14,9 @@
 - Document natural-history parameters and assumptions using roxygen2 comments,
   distinguish source evidence for each disease stage, and test the actual main
   scenario path.
+- Keep the analysis simple: use one short R helper script and run scenarios
+  directly from the Quarto document with `epiworldR::run_multiple()`. Keep
+  tests in their own folder; avoid wrapper chains and unnecessary runners.
 - For this work, open pull requests against `measles-wastewater-scenarios`
   unless the user specifies otherwise.
 
