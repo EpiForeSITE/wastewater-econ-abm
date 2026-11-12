@@ -14,6 +14,9 @@ settings <- c("Household", "School", "Work", "Other")
 #'
 #' Shares are within school districts, not across the county. They must be
 #' combined with district population estimates before assigning students.
+#' @examples
+#' schools <- utah_schools(county = "Salt Lake")
+#' head(schools[, c("id", "level", "vaxrate")])
 utah_schools <- function(
     county = "Salt Lake",
     path   = "data/utah/school_district_schoolID_data_Utah_2025.csv"
@@ -38,6 +41,11 @@ utah_schools <- function(
 #' school fractions are shares of the district school-age population. This
 #' assumes the five district boundaries cover the county and that a school's
 #' district-level share applies to its resident students.
+#' @examples
+#' schools <- utah_schools(county = "Salt Lake")
+#' weights <- utah_school_weights(schools = schools)
+#' head(weights)
+#' sum(weights)
 utah_school_weights <- function(
     schools = utah_schools(),
     path    = "data/utah/acs_Utah_2023_school_districts.csv"
@@ -79,6 +87,19 @@ utah_school_weights <- function(
 #' @param age_levels School level assigned to each age band, or NA.
 #' @param attendance Fraction attending school within each age band.
 #' @return Age groups, school IDs and coverage for each simulated agent.
+#' @examples
+#' set.seed(137)
+#' schools <- data.frame(
+#'   id      = c("A", "B", "C"),
+#'   level   = 1:3,
+#'   vaxrate = c(0.8, 0.9, 0.95)
+#' )
+#' population <- assign_schools(
+#'   pop     = rep(20L, 16),
+#'   schools = schools,
+#'   weights = c(1, 1, 1)
+#' )
+#' table(population$school, useNA = "ifany")
 assign_schools <- function(
     pop,
     schools,
@@ -127,6 +148,9 @@ assign_schools <- function(
 #' Read an Epistorm-Mix setting-specific M-matrix
 #' @param setting One of `settings`.
 #' @param path Directory with the CSV files.
+#' @examples
+#' contacts <- read_epistorm_matrix(setting = "School")
+#' contacts[1:3, 1:3]
 read_epistorm_matrix <- function(setting, path = "data/epistorm") {
 
   x <- utils::read.csv(
@@ -149,6 +173,10 @@ read_epistorm_matrix <- function(setting, path = "data/epistorm") {
 #' @param state_fips State FIPS code.
 #' @param year Census estimate year.
 #' @return A named integer vector with one entry per age group.
+#' @examples
+#' pop <- city_population(n = 1000, county = "Salt Lake County")
+#' pop
+#' sum(pop)
 city_population <- function(
     n          = 1e4,
     county     = "Salt Lake County",
@@ -182,6 +210,10 @@ city_population <- function(
 
 #' U.S. age distribution (proportions) over the same age groups
 #' @param year Census estimate year.
+#' @examples
+#' shares <- us_age_distribution(year = 2025)
+#' head(shares)
+#' sum(shares)
 us_age_distribution <- function(year = 2025) {
 
   us <- utils::read.csv(
@@ -211,6 +243,11 @@ us_age_distribution <- function(year = 2025) {
 #' reciprocal by averaging total contacts in each direction.
 #' @param pop Group sizes (from `city_population()`).
 #' @return A list with one matrix per setting plus `Total`.
+#' @examples
+#' pop <- city_population(n = 1000)
+#' contacts <- contact_matrices(pop = pop)
+#' names(contacts)
+#' contacts$Total[1:3, 1:3]
 contact_matrices <- function(pop) {
 
   w <- (pop / sum(pop)) / us_age_distribution()
@@ -241,6 +278,12 @@ contact_matrices <- function(pop) {
 #' @param matrix Numeric square matrix of per-person contact rates.
 #' @param pop Positive population sizes, one for each row and column.
 #' @return A numeric matrix of reciprocal per-person contact rates.
+#' @examples
+#' contacts <- matrix(c(2, 4, 1, 3), nrow = 2, byrow = TRUE)
+#' pop <- c(100, 200)
+#' reciprocal <- symmetric_contacts(matrix = contacts, pop = pop)
+#' reciprocal
+#' reciprocal * pop
 symmetric_contacts <- function(matrix, pop) {
 
   stopifnot(
@@ -266,6 +309,11 @@ symmetric_contacts <- function(matrix, pop) {
 #' @param cm List from `contact_matrices()`.
 #' @param reduction Proportional reduction in [0, 1].
 #' @param school_groups Names of the school-age groups.
+#' @examples
+#' pop <- city_population(n = 1000)
+#' contacts <- contact_matrices(pop = pop)
+#' reduced <- intervention_matrix(cm = contacts, reduction = 0.8)
+#' reduced[2:4, 2:4]
 intervention_matrix <- function(
     cm,
     reduction     = 0.8,

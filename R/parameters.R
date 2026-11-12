@@ -4,6 +4,9 @@
 #' Reads the parameter table
 #' @param file Path to the CSV file.
 #' @return A data frame with one row per argument of `measles_ww_params()`.
+#' @examples
+#' parameters <- ww_parameters()
+#' head(parameters[, c("r_argument", "default")])
 ww_parameters <- function(file = file.path("data", "parameters.csv")) {
   utils::read.csv(
     file         = file,
@@ -16,6 +19,9 @@ ww_parameters <- function(file = file.path("data", "parameters.csv")) {
 #' Formats the parameter table for display
 #' @param x Output of `ww_parameters()`.
 #' @return A data frame with the display columns; URLs become Markdown links.
+#' @examples
+#' parameters <- ww_parameters()
+#' head(format_ww_parameters(parameters))
 format_ww_parameters <- function(x) {
 
   # Format each parameter's source URLs as Markdown links.

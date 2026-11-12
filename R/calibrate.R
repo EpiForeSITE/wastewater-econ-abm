@@ -23,6 +23,20 @@
 #' @param p Parameters.
 #' @param trigger_ww WW threshold (copies/mL).
 #' @return A list with the trigger days and the cases seen at each trigger.
+#' @examples
+#' p <- measles_ww_params(
+#'   trigger_cases = 1,
+#'   case_report_delay = 0,
+#'   ww_lab_delay = 0
+#' )
+#' d <- data.frame(
+#'   day      = 1:3,
+#'   reported = c(0, 1, 0),
+#'   ww_obs   = c(0, 2, NA),
+#'   cum_rash = c(0, 1, 1),
+#'   cum_prod = c(0, 1, 1)
+#' )
+#' offline_triggers(d = d, p = p, trigger_ww = 1)
 offline_triggers <- function(d, p, trigger_ww = p$trigger_ww) {
 
   ndays <- nrow(d)
@@ -54,6 +68,22 @@ offline_triggers <- function(d, p, trigger_ww = p$trigger_ww) {
 #' @return A list with the selected threshold, the target, the number of runs
 #' used (those where the case trigger fires), and the calibration table, which
 #' also gives the percentage of those runs where WW crosses each threshold.
+#' @examples
+#' p <- measles_ww_params(
+#'   trigger_cases = 1,
+#'   case_report_delay = 0,
+#'   ww_lab_delay = 0
+#' )
+#' d <- data.frame(
+#'   day      = 1:3,
+#'   reported = c(0, 1, 0),
+#'   ww_obs   = c(0, 2, NA),
+#'   cum_rash = c(0, 1, 1),
+#'   cum_prod = c(0, 1, 1)
+#' )
+#' baseline <- data.frame(sim = 1)
+#' baseline$daily <- list(d)
+#' calibrate_ww_threshold(baseline = baseline, p = p, grid = c(1, 2))$table
 calibrate_ww_threshold <- function(
     baseline,
     p,

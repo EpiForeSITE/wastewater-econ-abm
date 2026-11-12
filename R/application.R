@@ -4,6 +4,10 @@
 #' supply the same pop, schools, weights, and cm inputs to [layered_setup()].
 #' @param n Number of simulated agents.
 #' @return A list of inputs for the generic layered setup.
+#' @examples
+#' inputs <- salt_lake_inputs(n = 1000)
+#' names(inputs)
+#' sum(inputs$pop)
 salt_lake_inputs <- function(n) {
 
   # Read the current application's demographic and school data.

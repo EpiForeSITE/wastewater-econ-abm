@@ -22,6 +22,9 @@
 #'
 #' All defaults can be overridden through `...`. See README.qmd for sources.
 #' @param ... Named values replacing the defaults.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30)
+#' p[c("n", "ndays", "R0")]
 measles_ww_params <- function(...) {
 
   defaults <- list(
@@ -71,6 +74,11 @@ measles_ww_params <- function(...) {
 #' @param p Model parameters.
 #' @param inputs Application inputs for [layered_setup()].
 #' @return Calibrated layered setup.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- build_setup(p = p, inputs = inputs)
+#' setup$R0_sim
 build_setup <- function(p, inputs) {
   setup <- do.call(layered_setup, c(list(p = p), inputs))
   calibrate_r0(p, setup)
@@ -78,6 +86,12 @@ build_setup <- function(p, inputs) {
 
 #' Calibrate both layers against the simulated reproduction number
 #' Estimates include index cases with zero secondary infections.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' calibrated <- calibrate_r0(p, setup, reps = 2, iter = 1, n_seed = 10)
+#' calibrated$R0_sim
 calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
   p$n_seed <- n_seed
   unvaccinated <- setup
@@ -116,6 +130,12 @@ calibrate_r0 <- function(p, setup, reps = 50, iter = 3, n_seed = 10) {
 }
 
 #' Build the two-layer measles model used by all scenarios
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' model <- build_model(p = p, setup = setup)
+#' epiworldR::get_stages(model)
 build_model <- function(p, setup) {
   model <- layered_measles(
     p                  = p,
@@ -138,6 +158,15 @@ build_model <- function(p, setup) {
 #' @param setup Output of `build_setup()`.
 #' @param scenario One of "baseline", "wastewater", or "cases".
 #' @param state Environment where the daily series are stored.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' model <- build_model(p = p, setup = setup)
+#' state <- new.env(parent = emptyenv())
+#' add_surveillance(model, p, setup, scenario = "baseline", state = state)
+#' epiworldR::run(model, ndays = p$ndays, seed = 42)
+#' head(state$ww_true)
 add_surveillance <- function(m, p, setup, scenario, state) {
 
   n_days <- p$ndays
@@ -270,6 +299,12 @@ add_surveillance <- function(m, p, setup, scenario, state) {
 #' @param scenario One of "baseline", "wastewater", or "cases".
 #' @param seed Seed for the C++ model. The caller controls R's RNG.
 #' @return A list with the daily series (`daily`) and the trigger day.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' result <- simulate_once(p, setup, scenario = "baseline", seed = 42)
+#' head(result$daily)
 simulate_once <- function(p, setup, scenario, seed) {
 
   m     <- build_model(p, setup)
@@ -309,6 +344,12 @@ simulate_once <- function(p, setup, scenario, seed) {
 #' @param cores Number of cores passed to `parallel::mclapply()`.
 #' @return A data.table with one row per simulation and scenario, with the
 #' daily series in the `daily` list column.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' runs <- run_scenarios(p, setup, nsims = 2, scenarios = "baseline")
+#' runs[, c("sim", "scenario", "final_size")]
 run_scenarios <- function(
     p,
     setup,

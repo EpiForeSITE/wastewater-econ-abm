@@ -15,6 +15,18 @@ library(epiworldR)
 #' @return An epiworldR model with community and school layers.
 #' @references Lessler et al. (2009), doi:10.1016/S1473-3099(09)70069-6.
 #'   Meyer et al. (2017), doi:10.18637/jss.v077.i11.
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' model <- layered_measles(
+#'   p                  = p,
+#'   population         = setup$persons,
+#'   community_matrix   = setup$community,
+#'   school_probability = setup$school_probability,
+#'   vaccinated         = setup$vaccinated
+#' )
+#' epiworldR::get_stages(model)
 layered_measles <- function(
     p,
     population,
@@ -143,6 +155,9 @@ layered_measles <- function(
 #' @param n Number of agents.
 #' @param probability Probability of selecting a rash case for isolation.
 #' @return An epiworldR global event.
+#' @examples
+#' event <- rash_isolation_event(n = 1000, probability = 0.5)
+#' class(event)
 rash_isolation_event <- function(n, probability) {
   # Track rash onsets separately for each simulation run.
   was_rash <- rep(FALSE, n)
@@ -167,6 +182,8 @@ rash_isolation_event <- function(n, probability) {
 #' @param probability Probability of hospitalization during rash.
 #' @param mean,sd Mean and standard deviation of rash duration in days.
 #' @return Daily hospitalization probability.
+#' @examples
+#' rash_hospitalization_rate(probability = 0.2, mean = 4, sd = 1)
 rash_hospitalization_rate <- function(probability, mean, sd) {
   stopifnot(probability >= 0, probability < 1, mean > 0, sd >= 0)
 
@@ -197,6 +214,12 @@ rash_hospitalization_rate <- function(probability, mean, sd) {
 #' @param weights School sampling weights, in school-record order.
 #' @param cm Contact matrices by setting.
 #' @return A list of population, contact and shedding inputs.
+#' @examples
+#' p <- measles_ww_params(n = 1000)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' length(setup$persons$school)
+#' head(setup$school_probability)
 layered_setup <- function(
     p,
     pop,
@@ -247,6 +270,12 @@ layered_setup <- function(
 #' @param scenario Baseline, wastewater, or cases.
 #' @param seed Random seed.
 #' @return The output of [simulate_once()].
+#' @examples
+#' p <- measles_ww_params(n = 1000, ndays = 30, n_seed = 5)
+#' inputs <- salt_lake_inputs(n = p$n)
+#' setup <- do.call(layered_setup, c(list(p = p), inputs))
+#' result <- simulate_layered_once(p, setup, scenario = "baseline", seed = 42)
+#' head(result$daily)
 simulate_layered_once <- function(p, setup, scenario = "baseline", seed = 1L) {
   simulate_once(p, setup, scenario, seed)
 }
