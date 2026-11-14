@@ -21,11 +21,11 @@ and calibrated transmission rate (0.115 per contact). Counts are for the
 Means per replicate, with medians of infections; most introductions stay
 small, so means are driven by the outbreaks that grow.
 
-| scenario | infections_mean | infections_median | infections_q90 | admissions | hospital_days | excluded_student_days | samples | alert_days | false_positives |
-|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| baseline | 32.6 | 4 | 95.1 | 0.6 | 3.9 | 13930.1 | 105 | 88.5 | 0.5 |
-| wastewater | 32.2 | 4 | 95.1 | 0.6 | 4.0 | 13970.1 | 105 | 107.5 | 0.5 |
-| wastewater-fast | 31.8 | 4 | 94.1 | 0.6 | 3.9 | 13928.0 | 105 | 107.6 | 0.5 |
+| scenario | infections_mean | infections_median | infections_q90 | admissions | hospital_days | excluded_student_days | samples | alert_days | false_positives | campaign_doses |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 14.0 | 4 | 41.0 | 0.3 | 1.8 | 5797.4 | 105 | 67.8 | 0.5 | 2877.9 |
+| wastewater | 12.6 | 4 | 35.0 | 0.2 | 1.6 | 5426.4 | 105 | 86.7 | 0.5 | 3648.0 |
+| wastewater-fast | 12.5 | 4 | 35.1 | 0.2 | 1.6 | 5394.2 | 105 | 85.7 | 0.5 | 3605.1 |
 
 ## Paired differences from the baseline
 
@@ -34,10 +34,10 @@ random draws, so differences within a replicate are effects of the
 scenario’s settings. “Averted” is baseline minus scenario; positive
 values favor the scenario.
 
-| scenario | infections_averted | infections_averted_median | fewer_infections_pct | more_infections_pct | admissions_averted | hospital_days_averted | excluded_days_averted | alert_days_added |
-|:---|---:|---:|---:|---:|---:|---:|---:|---:|
-| wastewater | 0.4 | 0 | 4.9 | 3.3 | 0 | 0.0 | -40.0 | 19.0 |
-| wastewater-fast | 0.8 | 0 | 5.7 | 3.8 | 0 | 0.1 | 2.1 | 19.2 |
+| scenario | infections_averted | infections_averted_median | fewer_infections_pct | more_infections_pct | admissions_averted | hospital_days_averted | excluded_days_averted | alert_days_added | doses_added |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| wastewater | 1.4 | 0 | 9.1 | 6.4 | 0 | 0.1 | 371.0 | 18.8 | 770.0 |
+| wastewater-fast | 1.5 | 0 | 10.6 | 6.3 | 0 | 0.1 | 403.2 | 17.8 | 727.2 |
 
 ## Timeliness
 
@@ -48,18 +48,19 @@ False positives are excluded.
 
 | scenario | replicates | ww_positive_pct | ww_first_pct | lead_days_median | lead_days_q25 | lead_days_q75 |
 |:---|---:|---:|---:|---:|---:|---:|
-| baseline | 704 | 62.6 | 21.9 | -7 | -31 | 5 |
-| wastewater | 716 | 62.3 | 22.6 | -6 | -30 | 5 |
-| wastewater-fast | 721 | 62.7 | 28.0 | -4 | -28 | 5 |
+| baseline | 704 | 62.9 | 21.9 | -7 | -26.5 | 5 |
+| wastewater | 716 | 62.8 | 22.8 | -6 | -24.8 | 5 |
+| wastewater-fast | 722 | 62.9 | 28.3 | -3 | -23.0 | 5 |
 
 ## Alert timing
 
-Every scenario raises case detection during a public health alert; the
-wastewater scenarios can start it before the first case report. Days
-gained compares, within each replicate, the day the alert first started
-in the baseline (first case report) and in the scenario. Replicates in
-which the scenario’s first alert followed a false positive before the
-outbreak was detected also count as alerts started by wastewater.
+Every scenario raises case detection and runs a vaccination campaign
+during a public health alert; the wastewater scenarios can start it
+before the first case report. Days gained compares, within each
+replicate, the day the alert first started in the baseline (first case
+report) and in the scenario. Replicates in which the scenario’s first
+alert followed a false positive before the outbreak was detected also
+count as alerts started by wastewater.
 
 | scenario | replicates | started_by_ww_pct | earlier_pct | days_gained_q50 | days_gained_q75 | days_gained_q90 |
 |:---|---:|---:|---:|---:|---:|---:|

@@ -327,10 +327,15 @@ days later.
 Any reported case starts or extends a county-wide public health alert of
 42 days (health alerts to clinicians, more testing). During the alert,
 the daily detection probability rises to 0.158, which reports 50% of
-cases. A reported student case also excludes the unvaccinated students
-of that school who have not been detected as cases. They return 42 days
-after the school’s last reported case, and a school can be excluded more
-than once.
+cases, and a vaccination campaign runs: each day, every agent not yet
+vaccinated and not detected as a case receives an MMR dose with
+probability 0.005 (about 19% of them over one 42-day alert; see
+[literature.md](../literature.md)). Doses also go to agents with
+undetected infections, as in practice, but protect only susceptible
+agents, from the next day. A reported student case also excludes the
+unvaccinated students of that school who have not been detected as
+cases. They return 42 days after the school’s last reported case, and a
+school can be excluded more than once.
 
 Infected agents shed into wastewater from 0 days before prodrome onset
 until 18 days after it, peaking at rash onset. Wastewater is sampled on
@@ -419,7 +424,8 @@ replicates <- rbindlist(lapply(runs, function(x) {
     alert_days                  = sum(d$alert_on),
     exclusion_episodes          = x$episodes,
     first_exclusion_day         = x$first_exclusion,
-    excluded_student_days       = sum(d$excluded)
+    excluded_student_days       = sum(d$excluded),
+    campaign_doses              = sum(d$doses)
   )
 }))
 daily <- rbindlist(lapply(runs, function(x) {
@@ -465,21 +471,22 @@ fwrite(metadata, file.path(out_dir, "metadata.csv"))
 Outcomes per replicate, including introductions that die out. Outbreak
 sizes are skewed, so the table shows quantiles as well as means.
 
-|                        | outcome                |    mean | median |     q90 |    max |
-|:-----------------------|:-----------------------|--------:|-------:|--------:|-------:|
-| infections             | infections             |    32.2 |      4 |    95.1 |    523 |
-| admissions             | admissions             |     0.6 |      0 |     2.0 |     10 |
-| hospital_days          | hospital_days          |     4.0 |      0 |    14.0 |    117 |
-| isolation_days         | isolation_days         |    29.5 |      4 |    94.1 |    486 |
-| excluded_student_days  | excluded_student_days  | 13970.1 |   3402 | 45866.8 | 193417 |
-| exclusion_episodes     | exclusion_episodes     |     3.8 |      1 |    12.0 |     52 |
-| samples                | samples                |   105.0 |    105 |   105.0 |    105 |
-| positive_samples       | positive_samples       |     4.8 |      1 |    13.1 |     60 |
-| false_positive_samples | false_positive_samples |     0.5 |      0 |     1.0 |      3 |
-| alerts                 | alerts                 |     1.1 |      1 |     2.0 |      4 |
-| alert_days             | alert_days             |   107.5 |     84 |   290.1 |    354 |
+|                        | outcome                |   mean | median |     q90 |   max |
+|:-----------------------|:-----------------------|-------:|-------:|--------:|------:|
+| infections             | infections             |   12.6 |      4 |    35.0 |   129 |
+| admissions             | admissions             |    0.2 |      0 |     1.0 |     4 |
+| hospital_days          | hospital_days          |    1.6 |      0 |     6.0 |    64 |
+| isolation_days         | isolation_days         |   11.1 |      4 |    33.0 |   133 |
+| excluded_student_days  | excluded_student_days  | 5426.4 |   2945 | 15013.5 | 47750 |
+| exclusion_episodes     | exclusion_episodes     |    1.8 |      1 |     5.0 |    15 |
+| samples                | samples                |  105.0 |    105 |   105.0 |   105 |
+| positive_samples       | positive_samples       |    2.3 |      1 |     6.0 |    18 |
+| false_positive_samples | false_positive_samples |    0.5 |      0 |     2.0 |     4 |
+| alerts                 | alerts                 |    1.2 |      1 |     2.0 |     4 |
+| alert_days             | alert_days             |   86.7 |     84 |   169.0 |   308 |
+| campaign_doses         | campaign_doses         | 3648.0 |   3839 |  6477.2 |  8879 |
 
-Across replicates, 46% of infections were reported (25% outside alerts
+Across replicates, 45% of infections were reported (25% outside alerts
 and 50% during them). Of the replicates, 716 had a reported case. In
 those, the median day of the first case report was 33, and of the first
 true-positive wastewater result 47.
@@ -488,8 +495,8 @@ true-positive wastewater result 47.
 
 ![](wastewater_files/figure-commonmark/fig-incidence-1.png)
 
-Figure 1: Mean daily new infections and excluded students across
-replicates, including those that die out.
+Figure 1: Mean daily new infections, excluded students and campaign
+doses across replicates, including those that die out.
 
 </div>
 
@@ -504,6 +511,10 @@ fully protecting a share of vaccinated agents, and adult coverage is
 assumed. Excluded students keep their community contacts, and
 non-student cases trigger no school action. The reporting fraction comes
 from one outbreak in southwest Utah and may differ in Salt Lake County,
-and the reporting fraction during an alert is assumed. These are
-modeling assumptions, not estimates validated against observed Salt Lake
-County outbreaks.
+and the reporting fraction during an alert is assumed. The campaign rate
+is derived from two outbreak responses (New York City and Swansea)
+rather than from Utah; it reaches every unvaccinated agent equally,
+ignores the targeting of exposed people within 72 hours, and does not
+let excluded students return once vaccinated. These are modeling
+assumptions, not estimates validated against observed Salt Lake County
+outbreaks.

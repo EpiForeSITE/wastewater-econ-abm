@@ -106,7 +106,7 @@ shedding, surveillance and response assumptions.
 `make test` runs the tests in [tests/](tests). `WASTEWATER_NSIMS` (default
 1,000) and `WASTEWATER_CORES` (default 5) set the replicates and cores, e.g.
 `WASTEWATER_NSIMS=10 make baseline` for a quick check. With 1,000
-replicates on five cores, `make` takes about an hour and a half.
+replicates on five cores, `make` takes about half an hour.
 
 ## Repository
 

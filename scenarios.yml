@@ -3,9 +3,9 @@
 # defaults in data/parameters.csv. Run one with `make <name>`.
 #
 # In every scenario, reported cases start a public health alert that raises
-# case detection, and reported student cases exclude their school's
-# unvaccinated students. With the "wastewater" response, positive
-# wastewater results can also start the alert.
+# case detection and runs an MMR vaccination campaign, and reported student
+# cases exclude their school's unvaccinated students. With the "wastewater"
+# response, positive wastewater results can also start the alert.
 
 baseline:
   description: >-
