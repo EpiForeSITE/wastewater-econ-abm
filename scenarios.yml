@@ -1,0 +1,31 @@
+# Scenarios for report.qmd. Each entry sets a description, the response
+# ("none", "cases" or "wastewater"), and any parameters that differ from the
+# defaults in data/parameters.csv. Run one with `make <name>`.
+#
+# In every scenario, reported cases start a public health alert that raises
+# case detection and runs an MMR vaccination campaign, and reported student
+# cases exclude their school's unvaccinated students. With the "wastewater"
+# response, positive wastewater results can also start the alert.
+
+baseline:
+  description: >-
+    Case-based surveillance: reported cases start a public health alert and
+    school exclusions; wastewater samples are recorded but not acted on.
+  response: cases
+
+wastewater:
+  description: >-
+    Baseline plus wastewater surveillance as practiced in Utah: samples twice
+    a week, with results four days after collection; positive results also
+    start the alert.
+  response: wastewater
+  ww_sampling_days: [1, 4]
+  ww_lab_delay: 4
+
+wastewater-fast:
+  description: >-
+    Wastewater surveillance with a faster turnaround: results two days after
+    collection.
+  response: wastewater
+  ww_sampling_days: [1, 4]
+  ww_lab_delay: 2

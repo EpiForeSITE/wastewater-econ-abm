@@ -1,0 +1,14 @@
+name,value
+scenario,baseline
+response,cases
+description,Case-based surveillance: reported cases start a public health alert and school exclusions; wastewater samples are recorded but not acted on.
+n,120000
+county_population,1220916
+county_scale,10.1743
+replicates,1000
+schools,41
+transmission_rate,0.114549977710105
+simulated_r0,6.998
+epiworldR_commit,
+git_commit,bb11a2872fcf6efcd70479c9442df0008dc6a684
+rendered,2026-11-13 22:09 MST
