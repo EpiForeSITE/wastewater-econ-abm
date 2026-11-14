@@ -1,0 +1,25 @@
+# Scenarios for report.qmd. Each entry sets a description, the response
+# ("none", "cases" or "wastewater"), and any parameters that differ from the
+# defaults in data/parameters.csv. Run one with `make <name>`.
+
+baseline:
+  description: >-
+    School exclusions after reported student cases; no wastewater
+    surveillance acts.
+  response: cases
+
+wastewater:
+  description: >-
+    Baseline plus wastewater surveillance as practiced in Utah: samples twice
+    a week, with results four days after collection.
+  response: wastewater
+  ww_sampling_days: [1, 4]
+  ww_lab_delay: 4
+
+wastewater-fast:
+  description: >-
+    Wastewater surveillance with a faster turnaround: results two days after
+    collection.
+  response: wastewater
+  ww_sampling_days: [1, 4]
+  ww_lab_delay: 2

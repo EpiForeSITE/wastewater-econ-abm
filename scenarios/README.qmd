@@ -1,0 +1,116 @@
+---
+title: Scenario comparison
+format: gfm
+execute:
+  echo: false
+  warning: false
+---
+
+This page compares the scenarios in [scenarios.yml](../scenarios.yml), using
+the outputs in [results/](../results). Run `make` from the repository root to
+render every scenario and this page. Each scenario has its own report:
+
+```{r}
+library(data.table)
+scenarios <- yaml::read_yaml("../scenarios.yml")
+knitr::kable(data.frame(
+  scenario    = sprintf("[%s](%s.md)", names(scenarios), names(scenarios)),
+  response    = vapply(scenarios, `[[`, "", "response"),
+  description = vapply(scenarios, `[[`, "", "description")
+), row.names = FALSE)
+```
+
+```{r}
+replicates <- rbindlist(lapply(names(scenarios), function(s) {
+  fread(file.path("../results", s, "replicates.csv"))
+}))
+metadata <- rbindlist(lapply(names(scenarios), function(s) {
+  fread(file.path("../results", s, "metadata.csv"))[, scenario := s]
+}))
+metadata <- dcast(metadata, scenario ~ name, value.var = "value")
+
+# Pairing needs the same replicates and calibration in every scenario.
+stopifnot(
+  length(unique(metadata$replicates)) == 1,
+  length(unique(metadata$transmission_rate)) == 1
+)
+```
+
+All scenarios share `r metadata$replicates[1]` replicates, the same
+population, vaccination and calibrated transmission rate
+(`r signif(as.numeric(metadata$transmission_rate[1]), 3)` per contact).
+Counts are for the `r format(as.numeric(metadata$n[1]), big.mark = ",")`-agent
+model; multiply by `r round(as.numeric(metadata$county_scale[1]), 2)` for
+Salt Lake County.
+
+## Outcomes by scenario
+
+Means per replicate, with medians of infections; most introductions stay
+small, so means are driven by the outbreaks that grow.
+
+```{r}
+replicates[, scenario := factor(scenario, levels = names(scenarios))]
+knitr::kable(
+  replicates[, .(
+    infections_mean       = mean(infections),
+    infections_median     = median(infections),
+    infections_q90        = quantile(infections, 0.9),
+    admissions            = mean(admissions),
+    hospital_days         = mean(hospital_days),
+    excluded_student_days = mean(excluded_student_days),
+    samples               = mean(samples),
+    alert_days            = mean(alert_days),
+    reduced_contact_days  = mean(reduced_contact_person_days)
+  ), keyby = scenario],
+  digits = 1
+)
+```
+
+## Paired differences from the baseline
+
+Replicate *i* of every scenario starts from the same school and the same
+random draws, so differences within a replicate are effects of the
+scenario's settings. "Averted" is baseline minus scenario; positive values
+favor the scenario.
+
+```{r}
+base <- replicates[scenario == names(scenarios)[1]]
+paired <- merge(
+  replicates[scenario != names(scenarios)[1]],
+  base,
+  by       = "replicate",
+  suffixes = c("", "_base")
+)
+knitr::kable(
+  paired[, .(
+    infections_averted         = mean(infections_base - infections),
+    infections_averted_median  = median(infections_base - infections),
+    fewer_infections_pct       = 100 * mean(infections < infections_base),
+    more_infections_pct        = 100 * mean(infections > infections_base),
+    admissions_averted         = mean(admissions_base - admissions),
+    hospital_days_averted      = mean(hospital_days_base - hospital_days),
+    excluded_days_averted      = mean(
+      excluded_student_days_base - excluded_student_days
+    ),
+    reduced_contact_days_added = mean(reduced_contact_person_days)
+  ), keyby = scenario],
+  digits = 1
+)
+```
+
+## Timeliness
+
+For replicates with at least one reported case, the lead time is the day of
+the first case report minus the day of the first positive wastewater result
+(positive values mean wastewater was first).
+
+```{r}
+lead <- replicates[!is.na(first_report_day), .(
+  replicates       = .N,
+  alert_first_pct  = 100 * mean(
+    !is.na(first_alert_day) & first_alert_day < first_report_day
+  ),
+  lead_days_median = median(first_report_day - first_alert_day, na.rm = TRUE)
+), keyby = scenario]
+knitr::kable(lead, digits = 1)
+```

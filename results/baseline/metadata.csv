@@ -1,0 +1,14 @@
+name,value
+scenario,baseline
+response,cases
+description,School exclusions after reported student cases; no wastewater surveillance acts.
+n,120000
+county_population,1220916
+county_scale,10.1743
+replicates,200
+schools,41
+transmission_rate,0.151579759173398
+simulated_r0,6.74
+epiworldR_commit,
+git_commit,48b1852a36159b286109caaba5538947493e9eeb
+rendered,2026-11-13 17:16 MST
