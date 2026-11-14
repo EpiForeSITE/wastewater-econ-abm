@@ -5,10 +5,10 @@ description,Wastewater surveillance with a faster turnaround: results two days a
 n,120000
 county_population,1220916
 county_scale,10.1743
-replicates,200
+replicates,1000
 schools,41
 transmission_rate,0.114549977710105
 simulated_r0,6.998
 epiworldR_commit,
-git_commit,cc1e6623c8b8eb8b2f986580080a1d8c497c7c8a
-rendered,2026-11-13 18:46 MST
+git_commit,91a88f8f044176d3557e34cd3e2be21f590bff34
+rendered,2026-11-13 20:32 MST

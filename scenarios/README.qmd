@@ -53,14 +53,14 @@ replicates[, scenario := factor(scenario, levels = names(scenarios))]
 knitr::kable(
   replicates[, .(
     infections_mean       = mean(infections),
-    infections_median     = median(infections),
+    infections_median     = as.numeric(median(infections)),
     infections_q90        = quantile(infections, 0.9),
     admissions            = mean(admissions),
     hospital_days         = mean(hospital_days),
     excluded_student_days = mean(excluded_student_days),
     samples               = mean(samples),
     alert_days            = mean(alert_days),
-    reduced_contact_days  = mean(reduced_contact_person_days)
+    false_positives       = mean(false_positive_samples)
   ), keyby = scenario],
   digits = 1
 )
@@ -84,7 +84,9 @@ paired <- merge(
 knitr::kable(
   paired[, .(
     infections_averted         = mean(infections_base - infections),
-    infections_averted_median  = median(infections_base - infections),
+    infections_averted_median  = as.numeric(
+      median(infections_base - infections)
+    ),
     fewer_infections_pct       = 100 * mean(infections < infections_base),
     more_infections_pct        = 100 * mean(infections > infections_base),
     admissions_averted         = mean(admissions_base - admissions),
@@ -92,7 +94,7 @@ knitr::kable(
     excluded_days_averted      = mean(
       excluded_student_days_base - excluded_student_days
     ),
-    reduced_contact_days_added = mean(reduced_contact_person_days)
+    alert_days_added           = mean(alert_days - alert_days_base)
   ), keyby = scenario],
   digits = 1
 )
@@ -115,9 +117,32 @@ lead <- replicates[!is.na(first_report_day), .(
   replicates          = .N,
   ww_positive_pct     = 100 * mean(!is.na(first_true_positive_day)),
   ww_first_pct        = 100 * mean(!is.na(lead) & lead > 0),
-  lead_days_median    = median(lead, na.rm = TRUE),
+  lead_days_median    = as.numeric(median(lead, na.rm = TRUE)),
   lead_days_q25       = quantile(lead, 0.25, na.rm = TRUE),
   lead_days_q75       = quantile(lead, 0.75, na.rm = TRUE)
 ), keyby = scenario]
 knitr::kable(lead, digits = 1)
+```
+
+## Alert timing
+
+Every scenario raises case detection during a public health alert; the
+wastewater scenarios can start it before the first case report. Days gained
+compares, within each replicate, the day the alert first started in the
+baseline (first case report) and in the scenario. Replicates in which the
+scenario's first alert followed a false positive before the outbreak was
+detected also count as alerts started by wastewater.
+
+```{r}
+alerts <- paired[!is.na(first_alert_day_base), .(
+  replicates        = .N,
+  started_by_ww_pct = 100 * mean(first_alert_trigger == "wastewater"),
+  earlier_pct       = 100 * mean(first_alert_day < first_alert_day_base),
+  days_gained_q50   = as.numeric(
+    median(first_alert_day_base - first_alert_day)
+  ),
+  days_gained_q75   = quantile(first_alert_day_base - first_alert_day, 0.75),
+  days_gained_q90   = quantile(first_alert_day_base - first_alert_day, 0.9)
+), keyby = scenario]
+knitr::kable(alerts, digits = 1)
 ```

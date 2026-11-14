@@ -1,6 +1,6 @@
 # Render one report per scenario in scenarios.yml, then compare them.
 # Results go to results/<scenario>/ and reports to scenarios/<scenario>.md.
-# WASTEWATER_NSIMS and WASTEWATER_CORES set replicates and cores (200, 5).
+# WASTEWATER_NSIMS and WASTEWATER_CORES set replicates and cores (1000, 5).
 
 SCENARIOS := baseline wastewater wastewater-fast
 

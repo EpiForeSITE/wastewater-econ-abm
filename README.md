@@ -4,7 +4,7 @@ This repository simulates measles outbreaks in a synthetic Salt Lake County
 population to estimate what a wastewater surveillance program adds to the
 usual case-based response. It produces outcomes for an economic evaluation:
 infections, hospital admissions and bed-days, school exclusions, wastewater
-samples and alerts, and the contact reductions alerts cause. The model is an
+samples, and public health alerts. The model is an
 exploratory simulation, not a forecast.
 
 ## The model
@@ -24,13 +24,16 @@ structure and school MMR coverage.
   outbreak in southwest Utah: hospitalized cases (2% of infections)
   and cases detected during rash are isolated and reported three days
   later.
-- **Case response.** A reported student case excludes the school's
+- **Public health alert.** Any reported case starts a 42-day county-wide
+  alert (extended by each new trigger) during which half of cases are
+  reported instead of a quarter.
+- **School exclusions.** A reported student case excludes the school's
   unvaccinated students for 42 days after its last reported case.
 - **Wastewater.** Infected agents shed into one county-wide catchment
   from prodrome onset (about four days before rash) for about two weeks.
-  Samples are taken twice a week and return a result some days later; a
-  positive result starts a 42-day county-wide alert that reduces community
-  contacts by 10% and raises the daily detection probability by 20%.
+  Samples are taken twice a week and return a result some days later. In
+  the wastewater scenarios a positive result also starts the alert, so the
+  program's value is starting it earlier, net of false alarms.
 - **Calibration.** The per-contact transmission probability is set so that
   an imported case causes seven secondary infections on average in a fully
   susceptible population.
@@ -58,9 +61,10 @@ flowchart LR
   P --> Shed[Shedding into<br/>wastewater]
   R --> Shed
   Shed --> Sample[Sample<br/>twice a week] -->|lab delay| Pos{Positive?}
-  Pos -->|yes| Alert["County alert, 42 days:<br/>community contacts -10%,<br/>detection +20%"]
-  Alert -.-> C
+  Pos -->|"yes (wastewater<br/>scenarios)"| Alert["Public health alert, 42 days:<br/>50% of cases reported"]
+  Alert -.-> I
 
+  I -->|report delay| Alert
   I -->|report delay| Excl["School exclusion, 42 days:<br/>unvaccinated students<br/>leave the school layer"]
   Excl -.-> Sch
 ```
@@ -72,8 +76,8 @@ of the default parameters in [data/parameters.csv](data/parameters.csv).
 
 | Scenario | Response |
 |:---|:---|
-| [baseline](scenarios/baseline.md) | School exclusions after reported cases; no wastewater action |
-| [wastewater](scenarios/wastewater.md) | Baseline plus wastewater alerts: samples twice a week, results in 4 days |
+| [baseline](scenarios/baseline.md) | Reported cases start alerts and school exclusions |
+| [wastewater](scenarios/wastewater.md) | Baseline, plus positive wastewater results start alerts: samples twice a week, results in 4 days |
 | [wastewater-fast](scenarios/wastewater-fast.md) | As above, with results in 2 days |
 
 Every scenario runs the same replicates: the same origin school, population,
@@ -93,9 +97,9 @@ replicate. [scenarios/README.md](scenarios/README.md) compares them.
    `results/<scenario>/`, described in [results/README.md](results/README.md).
 
 `make test` runs the tests in [tests/](tests). `WASTEWATER_NSIMS` (default
-200) and `WASTEWATER_CORES` (default 5) set the replicates and cores, e.g.
-`WASTEWATER_NSIMS=10 make baseline` for a quick check. With 200
-replicates on five cores, `make` takes about nine minutes.
+1,000) and `WASTEWATER_CORES` (default 5) set the replicates and cores, e.g.
+`WASTEWATER_NSIMS=10 make baseline` for a quick check. With 1,000
+replicates on five cores, `make` takes about an hour and a half.
 
 ## Repository
 

@@ -3,7 +3,7 @@
 
 **Scenario wastewater** (response: wastewater). Baseline plus wastewater
 surveillance as practiced in Utah: samples twice a week, with results
-four days after collection.
+four days after collection; positive results also start the alert.
 
 This report is rendered from [report.qmd](../report.qmd) by the Makefile
 target **wastewater**; scenario settings are in
@@ -322,7 +322,12 @@ c(
 probability 0.065 and isolated, and hospitalized cases (2% of
 infections) are always detected; the detection probability is solved so
 that, together, they report 25% of cases. Detected cases are reported 3
-days later. A reported student case excludes the unvaccinated students
+days later.
+
+Any reported case starts or extends a county-wide public health alert of
+42 days (health alerts to clinicians, more testing). During the alert,
+the daily detection probability rises to 0.158, which reports 50% of
+cases. A reported student case also excludes the unvaccinated students
 of that school who have not been detected as cases. They return 42 days
 after the school’s last reported case, and a school can be excluded more
 than once.
@@ -331,14 +336,14 @@ Infected agents shed into wastewater from 0 days before prodrome onset
 until 18 days after it, peaking at rash onset. Wastewater is sampled on
 Mon and Thu, and results arrive 4 days after sampling. A sample is
 positive if it reaches the limit of detection or, with probability
-0.005, falsely. A positive result starts or extends a county-wide alert
-of 42 days. In this scenario the alert reduces community contacts by 10%
-and raises the daily detection probability to 0.078. Wastewater cannot
-locate the outbreak, so it cannot act on a single school.
+0.005, falsely. In this scenario, a positive result also starts or
+extends the alert, so wastewater can raise detection before the first
+case is reported. Wastewater cannot locate the outbreak, so it cannot
+act on a single school.
 
 ## Run the replicates
 
-Each of 200 replicates draws an origin school uniformly at random and
+Each of 1000 replicates draws an origin school uniformly at random and
 infects 1 of its students. Every scenario uses the same replicate seeds,
 population and vaccination, so replicate *i* of two scenarios is
 identical until their settings make them diverge; compare scenarios
@@ -408,14 +413,10 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_alert_trigger         = x$first_trigger,
     first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
       p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
-    reduced_contact_person_days = if (scenario$response == "wastewater") {
-      p$n * p$community_contact_reduction * sum(d$alert_on)
-    } else {
-      0
-    },
     exclusion_episodes          = x$episodes,
     first_exclusion_day         = x$first_exclusion,
     excluded_student_days       = sum(d$excluded)
@@ -464,25 +465,24 @@ fwrite(metadata, file.path(out_dir, "metadata.csv"))
 Outcomes per replicate, including introductions that die out. Outbreak
 sizes are skewed, so the table shows quantiles as well as means.
 
-|  | outcome | mean | median | q90 | max |
-|:---|:---|---:|---:|---:|---:|
-| infections | infections | 35.6 | 5 | 130.2 | 340 |
-| admissions | admissions | 0.7 | 0 | 2.0 | 9 |
-| hospital_days | hospital_days | 4.8 | 0 | 16.1 | 75 |
-| isolation_days | isolation_days | 17.0 | 3 | 64.0 | 170 |
-| excluded_student_days | excluded_student_days | 11530.9 | 2289 | 41281.5 | 116477 |
-| exclusion_episodes | exclusion_episodes | 3.2 | 1 | 12.0 | 33 |
-| samples | samples | 105.0 | 105 | 105.0 | 105 |
-| positive_samples | positive_samples | 5.3 | 1 | 18.0 | 45 |
-| false_positive_samples | false_positive_samples | 0.5 | 0 | 1.0 | 3 |
-| alerts | alerts | 1.2 | 1 | 3.0 | 4 |
-| alert_days | alert_days | 83.3 | 42 | 252.0 | 347 |
-| reduced_contact_person_days | reduced_contact_person_days | 999120.0 | 504000 | 3024000.0 | 4164000 |
+|                        | outcome                |    mean | median |     q90 |    max |
+|:-----------------------|:-----------------------|--------:|-------:|--------:|-------:|
+| infections             | infections             |    32.2 |      4 |    95.1 |    523 |
+| admissions             | admissions             |     0.6 |      0 |     2.0 |     10 |
+| hospital_days          | hospital_days          |     4.0 |      0 |    14.0 |    117 |
+| isolation_days         | isolation_days         |    29.5 |      4 |    94.1 |    486 |
+| excluded_student_days  | excluded_student_days  | 13970.1 |   3402 | 45866.8 | 193417 |
+| exclusion_episodes     | exclusion_episodes     |     3.8 |      1 |    12.0 |     52 |
+| samples                | samples                |   105.0 |    105 |   105.0 |    105 |
+| positive_samples       | positive_samples       |     4.8 |      1 |    13.1 |     60 |
+| false_positive_samples | false_positive_samples |     0.5 |      0 |     1.0 |      3 |
+| alerts                 | alerts                 |     1.1 |      1 |     2.0 |      4 |
+| alert_days             | alert_days             |   107.5 |     84 |   290.1 |    354 |
 
-Across replicates, 27% of infections were reported (target 25%). Of the
-replicates, 140 had a reported case. In those, the median day of the
-first case report was 35, and of the first true-positive wastewater
-result 54.
+Across replicates, 46% of infections were reported (25% outside alerts
+and 50% during them). Of the replicates, 716 had a reported case. In
+those, the median day of the first case report was 33, and of the first
+true-positive wastewater result 47.
 
 <div id="fig-incidence">
 
@@ -503,6 +503,7 @@ Vaccination reduces each contact’s infection probability rather than
 fully protecting a share of vaccinated agents, and adult coverage is
 assumed. Excluded students keep their community contacts, and
 non-student cases trigger no school action. The reporting fraction comes
-from one outbreak in southwest Utah and may differ in Salt Lake County.
-These are modeling assumptions, not estimates validated against observed
-Salt Lake County outbreaks.
+from one outbreak in southwest Utah and may differ in Salt Lake County,
+and the reporting fraction during an alert is assumed. These are
+modeling assumptions, not estimates validated against observed Salt Lake
+County outbreaks.

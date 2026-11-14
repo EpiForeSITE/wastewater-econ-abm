@@ -70,7 +70,7 @@ none <- run_paired("none")
 cases <- run_paired("cases")
 expect_false(is.na(cases$first_exclusion))
 before <- seq_len(cases$first_exclusion)
-signals <- setdiff(names(none$daily), "excluded")
+signals <- setdiff(names(none$daily), c("excluded", "alert_on"))
 expect_equal(none$daily[before, signals], cases$daily[before, signals])
 
 # One detected student excludes the school's other unvaccinated students
@@ -94,7 +94,8 @@ expect_equal(
   which(run1$daily$reported > 0)[1]
 )
 
-# Wastewater alerts change contacts and detection only in their scenario.
+# Reported cases start the alert in every response; positive wastewater
+# results start it only in the wastewater response.
 q <- p
 q$ww_false_positive <- 1
 q$ww_sampling_days <- 0:6
@@ -104,19 +105,29 @@ for (scenario in c("cases", "wastewater")) {
   model <- build_model(q, setup, state, response = scenario)
   run(model, ndays = q$ndays, seed = 5)
   run1 <- state$runs[[1]]
-  acting <- scenario == "wastewater"
-  expect_equal(run1$first_alert, 1L + q$ww_lab_delay)
-  expect_true(all(run1$daily$alert_on[-seq_len(q$ww_lab_delay)]))
-  expect_equal(run1$alerts, 1L)
-  expect_equal(
-    get_param(model, "Community contact scale"),
-    if (acting) 1 - q$community_contact_reduction else 1
-  )
+  first_report <- which(run1$daily$reported > 0)[1]
+  if (scenario == "wastewater") {
+    expect_equal(run1$first_alert, 1L + q$ww_lab_delay)
+    expect_equal(run1$first_trigger, "wastewater")
+    expect_true(all(run1$daily$alert_on[-seq_len(q$ww_lab_delay)]))
+  } else {
+    expect_equal(run1$first_alert, first_report)
+    expect_equal(run1$first_trigger, "case")
+  }
   expect_equal(
     get_param(model, "Detection rate"),
-    if (acting) q$alert_detection_rate else q$detection_rate
+    if (run1$daily$alert_on[q$ndays]) {
+      q$alert_detection_rate
+    } else {
+      q$detection_rate
+    }
   )
 }
+state <- new.env(parent = emptyenv())
+model <- build_model(q, setup, state, response = "none")
+run(model, ndays = q$ndays, seed = 5)
+expect_true(is.na(state$runs[[1]]$first_alert))
+expect_equal(get_param(model, "Detection rate"), q$detection_rate)
 
 # Students are dealt into schools of about the target size.
 level <- rep(c(1, 2, NA), c(2600, 1400, 1000))

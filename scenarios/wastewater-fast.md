@@ -322,7 +322,12 @@ c(
 probability 0.065 and isolated, and hospitalized cases (2% of
 infections) are always detected; the detection probability is solved so
 that, together, they report 25% of cases. Detected cases are reported 3
-days later. A reported student case excludes the unvaccinated students
+days later.
+
+Any reported case starts or extends a county-wide public health alert of
+42 days (health alerts to clinicians, more testing). During the alert,
+the daily detection probability rises to 0.158, which reports 50% of
+cases. A reported student case also excludes the unvaccinated students
 of that school who have not been detected as cases. They return 42 days
 after the school’s last reported case, and a school can be excluded more
 than once.
@@ -331,14 +336,14 @@ Infected agents shed into wastewater from 0 days before prodrome onset
 until 18 days after it, peaking at rash onset. Wastewater is sampled on
 Mon and Thu, and results arrive 2 days after sampling. A sample is
 positive if it reaches the limit of detection or, with probability
-0.005, falsely. A positive result starts or extends a county-wide alert
-of 42 days. In this scenario the alert reduces community contacts by 10%
-and raises the daily detection probability to 0.078. Wastewater cannot
-locate the outbreak, so it cannot act on a single school.
+0.005, falsely. In this scenario, a positive result also starts or
+extends the alert, so wastewater can raise detection before the first
+case is reported. Wastewater cannot locate the outbreak, so it cannot
+act on a single school.
 
 ## Run the replicates
 
-Each of 200 replicates draws an origin school uniformly at random and
+Each of 1000 replicates draws an origin school uniformly at random and
 infects 1 of its students. Every scenario uses the same replicate seeds,
 population and vaccination, so replicate *i* of two scenarios is
 identical until their settings make them diverge; compare scenarios
@@ -408,14 +413,10 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_alert_trigger         = x$first_trigger,
     first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
       p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
-    reduced_contact_person_days = if (scenario$response == "wastewater") {
-      p$n * p$community_contact_reduction * sum(d$alert_on)
-    } else {
-      0
-    },
     exclusion_episodes          = x$episodes,
     first_exclusion_day         = x$first_exclusion,
     excluded_student_days       = sum(d$excluded)
@@ -464,25 +465,24 @@ fwrite(metadata, file.path(out_dir, "metadata.csv"))
 Outcomes per replicate, including introductions that die out. Outbreak
 sizes are skewed, so the table shows quantiles as well as means.
 
-|  | outcome | mean | median | q90 | max |
-|:---|:---|---:|---:|---:|---:|
-| infections | infections | 42.6 | 5.0 | 127.1 | 516 |
-| admissions | admissions | 0.7 | 0.0 | 3.0 | 8 |
-| hospital_days | hospital_days | 5.1 | 0.0 | 17.2 | 67 |
-| isolation_days | isolation_days | 21.3 | 3.5 | 66.0 | 286 |
-| excluded_student_days | excluded_student_days | 12544.6 | 2310.0 | 42386.1 | 158789 |
-| exclusion_episodes | exclusion_episodes | 3.4 | 1.0 | 10.2 | 44 |
-| samples | samples | 105.0 | 105.0 | 105.0 | 105 |
-| positive_samples | positive_samples | 6.0 | 2.0 | 20.0 | 55 |
-| false_positive_samples | false_positive_samples | 0.5 | 0.0 | 1.0 | 3 |
-| alerts | alerts | 1.2 | 1.0 | 3.0 | 5 |
-| alert_days | alert_days | 87.6 | 45.0 | 245.6 | 342 |
-| reduced_contact_person_days | reduced_contact_person_days | 1051740.0 | 540000.0 | 2947200.0 | 4104000 |
+|                        | outcome                |    mean | median |     q90 |    max |
+|:-----------------------|:-----------------------|--------:|-------:|--------:|-------:|
+| infections             | infections             |    31.8 |      4 |    94.1 |    523 |
+| admissions             | admissions             |     0.6 |      0 |     2.0 |     10 |
+| hospital_days          | hospital_days          |     3.9 |      0 |    14.0 |    117 |
+| isolation_days         | isolation_days         |    29.1 |      4 |    93.1 |    486 |
+| excluded_student_days  | excluded_student_days  | 13928.0 |   3486 | 45866.8 | 193417 |
+| exclusion_episodes     | exclusion_episodes     |     3.8 |      1 |    12.0 |     52 |
+| samples                | samples                |   105.0 |    105 |   105.0 |    105 |
+| positive_samples       | positive_samples       |     4.8 |      1 |    13.0 |     60 |
+| false_positive_samples | false_positive_samples |     0.5 |      0 |     2.0 |      3 |
+| alerts                 | alerts                 |     1.1 |      1 |     2.0 |      4 |
+| alert_days             | alert_days             |   107.6 |     84 |   287.3 |    356 |
 
-Across replicates, 27% of infections were reported (target 25%). Of the
-replicates, 139 had a reported case. In those, the median day of the
-first case report was 35, and of the first true-positive wastewater
-result 52.
+Across replicates, 46% of infections were reported (25% outside alerts
+and 50% during them). Of the replicates, 721 had a reported case. In
+those, the median day of the first case report was 33, and of the first
+true-positive wastewater result 45.
 
 <div id="fig-incidence">
 
@@ -503,6 +503,7 @@ Vaccination reduces each contact’s infection probability rather than
 fully protecting a share of vaccinated agents, and adult coverage is
 assumed. Excluded students keep their community contacts, and
 non-student cases trigger no school action. The reporting fraction comes
-from one outbreak in southwest Utah and may differ in Salt Lake County.
-These are modeling assumptions, not estimates validated against observed
-Salt Lake County outbreaks.
+from one outbreak in southwest Utah and may differ in Salt Lake County,
+and the reporting fraction during an alert is assumed. These are
+modeling assumptions, not estimates validated against observed Salt Lake
+County outbreaks.

@@ -37,7 +37,7 @@ upper quantiles alongside means.
 | Column | Meaning |
 |:---|:---|
 | `scenario` | Scenario name in `scenarios.yml` |
-| `response` | `cases` (school exclusions) or `wastewater` (exclusions plus alerts) |
+| `response` | `cases` (alerts and exclusions follow reported cases) or `wastewater` (positive samples can also start alerts) |
 | `replicate` | Replicate number; the key for paired comparisons |
 | `seed` | Random seed of the replicate |
 | `seed_school` | Index of the origin school (0-based) |
@@ -54,17 +54,19 @@ upper quantiles alongside means.
 | `samples` | Wastewater samples taken |
 | `positive_samples` | Positive samples, including false positives |
 | `false_positive_samples` | Positive samples drawn as false positives |
-| `alerts` | Distinct wastewater alerts (an alert extended by a new positive counts once) |
-| `first_alert_day` | Day the first positive result arrived, true or false (empty if none) |
-| `first_true_positive_day` | Day the first true-positive result arrived: sample day plus lab delay (empty if none) |
-| `alert_days` | Days with an alert on |
-| `reduced_contact_person_days` | Agents × alert days × the contact reduction; zero unless the response is `wastewater` |
+| `alerts` | Distinct public health alerts (an alert extended by a new trigger counts once) |
+| `first_alert_day` | Day the first alert started (empty if none) |
+| `first_alert_trigger` | What started the first alert: `case` or `wastewater` (empty if none) |
+| `first_true_positive_day` | Day the first true-positive wastewater result arrived: sample day plus lab delay (empty if none); recorded in every scenario |
+| `alert_days` | Days with an alert on (case detection is higher) |
 | `exclusion_episodes` | School exclusions started |
 | `first_exclusion_day` | Day of the first exclusion (empty if none) |
 | `excluded_student_days` | Student-days excluded from school |
 
-With the `cases` response, the alert columns count the alerts the program
-*would* have issued; nothing acts on them.
+An alert raises the daily detection probability so that
+`alert_reporting_fraction` (50%) of cases are reported instead of 25%. With
+the `cases` response only reported cases start alerts; wastewater samples
+are still recorded.
 
 ## `daily.csv.gz`
 
@@ -80,7 +82,7 @@ With the `cases` response, the alert columns count the alerts the program
 | `hospitalized` | Agents in hospital at the end of the day |
 | `isolated` | Detected cases isolated at home at the end of the day |
 | `excluded` | Students excluded from school |
-| `alert_on` | Whether a wastewater alert is on |
+| `alert_on` | Whether a public health alert is on |
 | `ww_obs` | Measured concentration (copies/mL); empty on non-sampling days |
 | `ww_positive` | Whether the sample was positive; empty on non-sampling days |
 | `ww_false` | Whether the positive was false; empty on non-sampling days |

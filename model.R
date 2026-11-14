@@ -118,8 +118,7 @@ build_model <- function(
     name           = "community",
     groups         = as.integer(population$age_group),
     contact_matrix = setup$community
-  ) |>
-    set_contact_rate(param = "Community contact scale")
+  )
   schools <- layer_mixing(
     name         = "schools",
     groups       = as.integer(population$school),
@@ -132,7 +131,6 @@ build_model <- function(
   }
   model <- Model(n = p$n) |>
     add_param("Detection rate", p$detection_rate) |>
-    add_param("Community contact scale", 1) |>
     add_layer(layer = community) |>
     add_layer(layer = schools) |>
     add_virus(virus = virus, assign = placement)
@@ -480,18 +478,19 @@ rash_detection_rate <- function(reporting, hospitalization, mean, sd) {
 #' hospital) are reported after `case_report_delay` days. In the `"cases"`
 #' and `"wastewater"` responses, a reported student case excludes the
 #' school's unvaccinated students who have not been detected as cases;
-#' they return `response_days` after the school's last reported case.
+#' they return `response_days` after the school's last reported case. Any
+#' reported case also starts or extends a county-wide public health alert of
+#' `response_days` days, which raises the daily detection probability to
+#' `alert_detection_rate`.
 #' Wastewater is sampled on `ww_sampling_days` of each week. Agents shed
 #' from `ww_t_start` days before prodrome onset, following `setup$kernel`
 #' (one entry per day from that start); because prodrome onsets are known
 #' only when they happen, a sample is measured `ww_t_start` days after it is
 #' taken, which requires `ww_t_start <= ww_lab_delay`. A sample is
 #' positive when its concentration reaches `trigger_ww` or, with probability
-#' `ww_false_positive`, falsely. A positive result, available after
-#' `ww_lab_delay` days, starts or extends a county-wide alert of
-#' `response_days` days. In the `"wastewater"` response the alert reduces
-#' community contacts by `community_contact_reduction` and raises the daily
-#' detection probability to `alert_detection_rate`. R events require
+#' `ww_false_positive`, falsely. In the `"wastewater"` response, a positive
+#' result, available after `ww_lab_delay` days, also starts or extends the
+#' alert; every response records the samples. R events require
 #' single-threaded runs.
 #' @param p Disease, surveillance and response parameters.
 #' @param setup Population, vaccination and shedding inputs.
@@ -552,6 +551,7 @@ response_event <- function(p, setup, response, state, n_seed) {
     state$acting      <- FALSE
     state$alerts      <- 0L
     state$first_alert <- NA_integer_
+    state$first_trigger <- NA_character_
     state$prev <- c(inf = n_seed, prod = 0, rash = 0)
   }
 
@@ -609,22 +609,26 @@ response_event <- function(p, setup, response, state, n_seed) {
       state$ww_false[u]    <- !true_positive && false_draw
     }
 
-    # A positive result starts or extends the county-wide alert.
-    # Actions taken at the end of day t apply from day t + 1.
+    # A reported case, or in the wastewater response a positive result,
+    # starts or extends the alert. Actions at the end of day t apply from
+    # day t + 1.
+    reported <- state$queue[[t]]
+    state$reported[t] <- length(reported)
     s <- t - p$ww_lab_delay
-    if (s >= 1 && isTRUE(state$ww_positive[s])) {
+    ww_trigger <- response == "wastewater" && s >= 1 &&
+      isTRUE(state$ww_positive[s])
+    case_trigger <- respond && length(reported) > 0
+    if (case_trigger || ww_trigger) {
       if (t >= state$alert_end) state$alerts <- state$alerts + 1L
-      if (is.na(state$first_alert)) state$first_alert <- t
+      if (is.na(state$first_alert)) {
+        state$first_alert <- t
+        state$first_trigger <- if (case_trigger) "case" else "wastewater"
+      }
       state$alert_end <- t + p$response_days
     }
     on <- t < state$alert_end
     state$alert_on[t] <- on
-    if (response == "wastewater" && on != state$acting) {
-      set_param(
-        m,
-        "Community contact scale",
-        if (on) 1 - p$community_contact_reduction else 1
-      )
+    if (on != state$acting) {
       set_param(
         m,
         "Detection rate",
@@ -634,8 +638,6 @@ response_event <- function(p, setup, response, state, n_seed) {
     }
 
     # Reported student cases exclude their school's unvaccinated students.
-    reported <- state$queue[[t]]
-    state$reported[t] <- length(reported)
     if (respond) {
       layer <- get_layer(m, "schools")
       for (s_id in unique(stats::na.omit(school[reported + 1L]))) {
@@ -692,7 +694,8 @@ response_event <- function(p, setup, response, state, n_seed) {
         episodes        = state$episodes,
         first_exclusion = state$first_exclusion,
         alerts          = state$alerts,
-        first_alert     = state$first_alert
+        first_alert     = state$first_alert,
+        first_trigger   = state$first_trigger
       )
     }
 

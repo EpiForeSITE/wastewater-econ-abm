@@ -24,25 +24,27 @@ scenario <- read_scenario(
 )
 p <- scenario$p
 
-# Detection reports the target share of cases, counting hospitalizations.
-p$detection_rate <- rash_detection_rate(
-  reporting       = p$reporting_fraction,
-  hospitalization = rash_hospitalization_rate(
-    probability = p$prob_hospitalization,
-    mean        = p$rash_period,
-    sd          = p$rash_period_sd
-  ),
-  mean            = p$rash_period,
-  sd              = p$rash_period_sd
+# Detection reports the target share of cases, counting hospitalizations,
+# outside and during a public health alert.
+hospitalization <- rash_hospitalization_rate(
+  probability = p$prob_hospitalization,
+  mean        = p$rash_period,
+  sd          = p$rash_period_sd
 )
-p$alert_detection_rate <- min(
-  1,
-  p$detection_rate * (1 + p$alert_detection_increase)
-)
+detection_for <- function(reporting) {
+  rash_detection_rate(
+    reporting       = reporting,
+    hospitalization = hospitalization,
+    mean            = p$rash_period,
+    sd              = p$rash_period_sd
+  )
+}
+p$detection_rate <- detection_for(p$reporting_fraction)
+p$alert_detection_rate <- detection_for(p$alert_reporting_fraction)
 day_names <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
-# Default to 200 replicates on five cores; fewer help while editing.
-nsims <- as.integer(Sys.getenv("WASTEWATER_NSIMS", unset = "200"))
+# Default to 1,000 replicates on five cores; fewer help while editing.
+nsims <- as.integer(Sys.getenv("WASTEWATER_NSIMS", unset = "1000"))
 ncores <- as.integer(Sys.getenv("WASTEWATER_CORES", unset = "5"))
 stopifnot(nsims > 0, ncores > 0)
 out_dir <- file.path("results", scenario$name)
@@ -50,19 +52,16 @@ out_dir <- file.path("results", scenario$name)
 # Sentences that depend on the scenario.
 sampling_days <- paste(day_names[p$ww_sampling_days + 1], collapse = " and ")
 alert_text <- if (scenario$response == "wastewater") {
-  sprintf(
-    paste(
-      "In this scenario the alert reduces community contacts by %g%% and",
-      "raises the daily detection probability to %.3f. Wastewater cannot",
-      "locate the outbreak, so it cannot act on a single school."
-    ),
-    100 * p$community_contact_reduction,
-    p$alert_detection_rate
+  paste(
+    "In this scenario, a positive result also starts or extends the alert,",
+    "so wastewater can raise detection before the first case is reported.",
+    "Wastewater cannot locate the outbreak, so it cannot act on a single",
+    "school."
   )
 } else {
   paste(
-    "In this scenario nothing acts on the alerts; they are recorded as the",
-    "alerts the program would have issued."
+    "In this scenario only reported cases start the alert; the samples are",
+    "recorded but nothing acts on them."
   )
 }
 ```
@@ -376,7 +375,13 @@ isolated, and hospitalized cases (`r 100 * p$prob_hospitalization`% of
 infections) are always detected; the detection probability is solved so
 that, together, they report `r 100 * p$reporting_fraction`% of cases.
 Detected cases are reported `r p$case_report_delay` days later.
-A reported student case excludes the unvaccinated students of that
+
+Any reported case starts or extends a county-wide public health alert of
+`r p$response_days` days (health alerts to clinicians, more testing). During
+the alert, the daily detection probability rises to
+`r round(p$alert_detection_rate, 3)`, which reports
+`r 100 * p$alert_reporting_fraction`% of cases. A reported student case also
+excludes the unvaccinated students of that
 school who have not been detected as cases. They return `r p$response_days`
 days after the school's last reported case, and a school can be excluded
 more than once.
@@ -385,9 +390,8 @@ Infected agents shed into wastewater from `r p$ww_t_start` days before
 prodrome onset until `r p$ww_t_end` days after it, peaking at rash onset.
 Wastewater is sampled on `r sampling_days`, and results arrive
 `r p$ww_lab_delay` days after sampling. A sample is positive if it reaches
-the limit of detection or, with probability
-`r p$ww_false_positive`, falsely. A positive result starts or extends a
-county-wide alert of `r p$response_days` days. `r alert_text`
+the limit of detection or, with probability `r p$ww_false_positive`,
+falsely. `r alert_text`
 
 ## Run the replicates
 
@@ -462,14 +466,10 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_alert_trigger         = x$first_trigger,
     first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
       p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
-    reduced_contact_person_days = if (scenario$response == "wastewater") {
-      p$n * p$community_contact_reduction * sum(d$alert_on)
-    } else {
-      0
-    },
     exclusion_episodes          = x$episodes,
     first_exclusion_day         = x$first_exclusion,
     excluded_student_days       = sum(d$excluded)
@@ -523,8 +523,7 @@ sizes are skewed, so the table shows quantiles as well as means.
 outcomes <- c(
   "infections", "admissions", "hospital_days", "isolation_days",
   "excluded_student_days", "exclusion_episodes", "samples",
-  "positive_samples", "false_positive_samples", "alerts", "alert_days",
-  "reduced_contact_person_days"
+  "positive_samples", "false_positive_samples", "alerts", "alert_days"
 )
 knitr::kable(
   data.frame(
@@ -550,11 +549,12 @@ timing <- c(
 )
 ```
 
-Across replicates, `r reported_pct`% of infections were reported (target
-`r 100 * p$reporting_fraction`%). Of the replicates, `r nrow(reported)` had a
-reported case. In those, the
-median day of the first case report was `r timing[["report"]]`, and of the
-first true-positive wastewater result `r timing[["alert"]]`.
+Across replicates, `r reported_pct`% of infections were reported
+(`r 100 * p$reporting_fraction`% outside alerts and
+`r 100 * p$alert_reporting_fraction`% during them). Of the replicates,
+`r nrow(reported)` had a reported case. In those, the median day of the
+first case report was `r timing[["report"]]`, and of the first
+true-positive wastewater result `r timing[["alert"]]`.
 
 ```{r}
 #| label: fig-incidence
@@ -585,5 +585,6 @@ contact's infection probability rather than fully protecting a share of
 vaccinated agents, and adult coverage is assumed. Excluded students keep
 their community contacts, and non-student cases trigger no school action.
 The reporting fraction comes from one outbreak in southwest Utah and may
-differ in Salt Lake County. These are modeling assumptions, not
+differ in Salt Lake County, and the reporting fraction during an alert is
+assumed. These are modeling assumptions, not
 estimates validated against observed Salt Lake County outbreaks.
