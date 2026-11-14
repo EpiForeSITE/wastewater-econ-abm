@@ -60,7 +60,8 @@ knitr::kable(
     excluded_student_days = mean(excluded_student_days),
     samples               = mean(samples),
     alert_days            = mean(alert_days),
-    false_positives       = mean(false_positive_samples)
+    false_positives       = mean(false_positive_samples),
+    campaign_doses        = mean(campaign_doses)
   ), keyby = scenario],
   digits = 1
 )
@@ -94,7 +95,8 @@ knitr::kable(
     excluded_days_averted      = mean(
       excluded_student_days_base - excluded_student_days
     ),
-    alert_days_added           = mean(alert_days - alert_days_base)
+    alert_days_added           = mean(alert_days - alert_days_base),
+    doses_added                = mean(campaign_doses - campaign_doses_base)
   ), keyby = scenario],
   digits = 1
 )
@@ -126,7 +128,8 @@ knitr::kable(lead, digits = 1)
 
 ## Alert timing
 
-Every scenario raises case detection during a public health alert; the
+Every scenario raises case detection and runs a vaccination campaign during
+a public health alert; the
 wastewater scenarios can start it before the first case report. Days gained
 compares, within each replicate, the day the alert first started in the
 baseline (first case report) and in the scenario. Replicates in which the

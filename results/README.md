@@ -27,7 +27,7 @@ identical until their settings make them diverge. Compare scenarios
 All counts are for the 120,000-agent model. Multiply counts by
 `county_scale` in `metadata.csv` (about 10.17) to approximate Salt Lake
 County totals. Wastewater samples, alerts and alert days do not scale: there
-is one catchment for the county.
+is one catchment for the county. Campaign doses do scale.
 
 Most introductions die out, so outcomes are very skewed. Report medians and
 upper quantiles alongside means.
@@ -62,9 +62,14 @@ upper quantiles alongside means.
 | `exclusion_episodes` | School exclusions started |
 | `first_exclusion_day` | Day of the first exclusion (empty if none) |
 | `excluded_student_days` | Student-days excluded from school |
+| `campaign_doses` | MMR doses given by the alert's vaccination campaign |
 
 An alert raises the daily detection probability so that
-`alert_reporting_fraction` (50%) of cases are reported instead of 25%. With
+`alert_reporting_fraction` (50%) of cases are reported instead of 25%, and
+runs a vaccination campaign: each day, every agent not yet vaccinated and
+not detected as a case receives an MMR dose with probability
+`campaign_rate` (0.005). Doses also go to undetected infections, so
+`campaign_doses` counts every dose given, protective or not. With
 the `cases` response only reported cases start alerts; wastewater samples
 are still recorded.
 
@@ -83,6 +88,7 @@ are still recorded.
 | `isolated` | Detected cases isolated at home at the end of the day |
 | `excluded` | Students excluded from school |
 | `alert_on` | Whether a public health alert is on |
+| `doses` | MMR doses given by the vaccination campaign |
 | `ww_obs` | Measured concentration (copies/mL); empty on non-sampling days |
 | `ww_positive` | Whether the sample was positive; empty on non-sampling days |
 | `ww_false` | Whether the positive was false; empty on non-sampling days |

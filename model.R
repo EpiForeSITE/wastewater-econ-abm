@@ -12,9 +12,11 @@ library(epiworldR)
 #' @param p Disease, surveillance and response parameters.
 #' @param setup Population, contacts, vaccination and shedding inputs.
 #' @param state Environment that receives one record per simulation.
-#' @param response `"none"` (record only), `"cases"` (exclude unvaccinated
-#'   students from schools with reported cases), or `"wastewater"` (the case
-#'   response plus a county-wide alert after positive samples).
+#' @param response `"none"` (record only), `"cases"` (reported cases start
+#'   a public health alert, with more detection and a vaccination campaign,
+#'   and exclude unvaccinated students from their schools), or
+#'   `"wastewater"` (positive samples can also start the alert); see
+#'   [response_event()].
 #' @param seeds Agent ids (from 0) infected on day 0; `NULL` draws `p$n_seed`
 #'   agents at random in every run.
 #' @return An epiworldR model ready for [epiworldR::run()] or
@@ -135,21 +137,20 @@ build_model <- function(
     add_layer(layer = schools) |>
     add_virus(virus = virus, assign = placement)
 
-  # Apply MMR protection to the supplied agents.
-  if (length(setup$vaccinated)) {
-    vaccine <- tool(
-      name                     = "MMR",
-      susceptibility_reduction = p$vax_efficacy,
-      transmission_reduction   = 0,
-      recovery_enhancer        = 0,
-      death_reduction          = 0
+  # Apply MMR protection to the supplied agents. The tool is always added,
+  # since vaccination campaigns give the model's copy to more agents.
+  vaccine <- tool(
+    name                     = "MMR",
+    susceptibility_reduction = p$vax_efficacy,
+    transmission_reduction   = 0,
+    recovery_enhancer        = 0,
+    death_reduction          = 0
+  )
+  model <- model |>
+    add_tool(
+      tool   = vaccine,
+      assign = assign_agents(ids = as.integer(setup$vaccinated))
     )
-    model <- model |>
-      add_tool(
-        tool   = vaccine,
-        assign = assign_agents(ids = as.integer(setup$vaccinated))
-      )
-  }
 
   # Attach surveillance and response without capturing the model.
   model |>
@@ -481,7 +482,13 @@ rash_detection_rate <- function(reporting, hospitalization, mean, sd) {
 #' they return `response_days` after the school's last reported case. Any
 #' reported case also starts or extends a county-wide public health alert of
 #' `response_days` days, which raises the daily detection probability to
-#' `alert_detection_rate`.
+#' `alert_detection_rate`, and runs a vaccination campaign: each alert day,
+#' every agent not yet vaccinated and not detected as a case receives an
+#' MMR dose with probability `campaign_rate`. Public health cannot tell
+#' undetected infections from susceptibles, so doses also go to agents
+#' already infected or recovered, but protect only those still susceptible,
+#' from the next day. Students vaccinated before their school is excluded
+#' stay in school.
 #' Wastewater is sampled on `ww_sampling_days` of each week. Agents shed
 #' from `ww_t_start` days before prodrome onset, following `setup$kernel`
 #' (one entry per day from that start); because prodrome onsets are known
@@ -533,10 +540,13 @@ response_event <- function(p, setup, response, state, n_seed) {
   reset <- function() {
     daily <- c(
       "new_infections", "new_rash", "new_detected", "reported",
-      "admissions", "hospitalized", "isolated", "excluded", "cohort_g"
+      "admissions", "hospitalized", "isolated", "excluded", "doses",
+      "cohort_g"
     )
     for (v in daily) assign(v, numeric(n_days), envir = state)
     state$ever_hospital <- rep(FALSE, length(school))
+    state$vaccinated  <- rep(FALSE, length(school))
+    state$vaccinated[setup$vaccinated + 1L] <- TRUE
     state$alert_on    <- logical(n_days)
     state$ww_obs      <- rep(NA_real_, n_days)
     state$ww_positive <- rep(NA, n_days)
@@ -637,6 +647,19 @@ response_event <- function(p, setup, response, state, n_seed) {
       state$acting <- on
     }
 
+    # During an alert, unvaccinated agents not detected as cases get MMR.
+    if (on && p$campaign_rate > 0) {
+      pool <- which(!state$vaccinated & !state$detected)
+      dosed <- pool[stats::runif(length(pool)) < p$campaign_rate]
+      if (length(dosed)) {
+        agents <- get_agents(m)
+        mmr <- get_tool(m, 0)
+        for (i in dosed) add_tool_agent(agents[i - 1L], m, mmr)
+        state$vaccinated[dosed] <- TRUE
+      }
+      state$doses[t] <- length(dosed)
+    }
+
     # Reported student cases exclude their school's unvaccinated students.
     if (respond) {
       layer <- get_layer(m, "schools")
@@ -644,7 +667,7 @@ response_event <- function(p, setup, response, state, n_seed) {
         key <- as.character(s_id)
         if (is.null(state$excluded_ids[[key]])) {
           ids <- pupils[[s_id + 1L]]
-          ids <- ids[!state$detected[ids + 1L]]
+          ids <- ids[!state$detected[ids + 1L] & !state$vaccinated[ids + 1L]]
           for (i in ids) set_group(layer, i, NA)
           state$excluded_ids[[key]] <- ids
           state$episodes <- state$episodes + 1L
@@ -682,6 +705,7 @@ response_event <- function(p, setup, response, state, n_seed) {
           isolated       = state$isolated,
           excluded       = state$excluded,
           alert_on       = state$alert_on,
+          doses          = state$doses,
           ww_obs         = state$ww_obs,
           ww_positive    = state$ww_positive,
           ww_false       = state$ww_false

@@ -4,7 +4,8 @@ This repository simulates measles outbreaks in a synthetic Salt Lake County
 population to estimate what a wastewater surveillance program adds to the
 usual case-based response. It produces outcomes for an economic evaluation:
 infections, hospital admissions and bed-days, school exclusions, wastewater
-samples, and public health alerts. The model is an
+samples, public health alerts, and vaccination campaign doses. The model
+is an
 exploratory simulation, not a forecast.
 
 ## The model
@@ -25,15 +26,18 @@ structure and school MMR coverage.
   and cases detected during rash are isolated and reported three days
   later.
 - **Public health alert.** Any reported case starts a 42-day county-wide
-  alert (extended by each new trigger) during which half of cases are
-  reported instead of a quarter.
+  alert (extended by each new trigger). During it, half of cases are
+  reported instead of a quarter, and a vaccination campaign gives each
+  unvaccinated agent a 0.5% daily chance of an MMR dose (about a fifth of
+  them over one alert).
 - **School exclusions.** A reported student case excludes the school's
   unvaccinated students for 42 days after its last reported case.
 - **Wastewater.** Infected agents shed into one county-wide catchment
   from prodrome onset (about four days before rash) for about two weeks.
   Samples are taken twice a week and return a result some days later. In
   the wastewater scenarios a positive result also starts the alert, so the
-  program's value is starting it earlier, net of false alarms.
+  program's value is starting the alert and its campaign earlier, net of
+  false alarms.
 - **Calibration.** The per-contact transmission probability is set so that
   an imported case causes seven secondary infections on average in a fully
   susceptible population.
@@ -61,8 +65,9 @@ flowchart LR
   P --> Shed[Shedding into<br/>wastewater]
   R --> Shed
   Shed --> Sample[Sample<br/>twice a week] -->|lab delay| Pos{Positive?}
-  Pos -->|"yes (wastewater<br/>scenarios)"| Alert["Public health alert, 42 days:<br/>50% of cases reported"]
+  Pos -->|"yes (wastewater<br/>scenarios)"| Alert["Public health alert, 42 days:<br/>50% of cases reported,<br/>vaccination campaign"]
   Alert -.-> I
+  Alert -. MMR doses .-> S
 
   I -->|report delay| Alert
   I -->|report delay| Excl["School exclusion, 42 days:<br/>unvaccinated students<br/>leave the school layer"]
@@ -76,13 +81,15 @@ of the default parameters in [data/parameters.csv](data/parameters.csv).
 
 | Scenario | Response |
 |:---|:---|
-| [baseline](scenarios/baseline.md) | Reported cases start alerts and school exclusions |
+| [baseline](scenarios/baseline.md) | Reported cases start alerts (with a vaccination campaign) and school exclusions |
 | [wastewater](scenarios/wastewater.md) | Baseline, plus positive wastewater results start alerts: samples twice a week, results in 4 days |
 | [wastewater-fast](scenarios/wastewater-fast.md) | As above, with results in 2 days |
 
 Every scenario runs the same replicates: the same origin school, population,
 vaccination and random draws, so outcomes can be compared replicate by
 replicate. [scenarios/README.md](scenarios/README.md) compares them.
+[literature.md](literature.md) summarizes the evidence behind the
+shedding, surveillance and response assumptions.
 
 ## Workflow
 
@@ -108,6 +115,7 @@ replicates on five cores, `make` takes about an hour and a half.
 | [model.R](model.R) | Model builder, response event, and population helpers |
 | [report.qmd](report.qmd) | Parameterized report that runs one scenario |
 | [scenarios.yml](scenarios.yml) | Scenario definitions |
+| [literature.md](literature.md) | Literature notes on shedding, surveillance and outbreak response |
 | [data/](data) | Parameters, contact matrices, and Utah school data |
 | [scenarios/](scenarios) | Rendered reports and the comparison |
 | [results/](results) | Simulation outputs for the economic evaluation |

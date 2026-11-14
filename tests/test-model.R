@@ -70,7 +70,7 @@ none <- run_paired("none")
 cases <- run_paired("cases")
 expect_false(is.na(cases$first_exclusion))
 before <- seq_len(cases$first_exclusion)
-signals <- setdiff(names(none$daily), c("excluded", "alert_on"))
+signals <- setdiff(names(none$daily), c("excluded", "alert_on", "doses"))
 expect_equal(none$daily[before, signals], cases$daily[before, signals])
 
 # One detected student excludes the school's other unvaccinated students
@@ -80,6 +80,7 @@ q$transmission_rate <- 0
 q$detection_rate <- 1
 q$case_report_delay <- 0
 q$prob_hospitalization <- 0
+q$campaign_rate <- 0
 q$ndays <- 100
 state <- new.env(parent = emptyenv())
 model <- build_model(q, setup, state, response = "cases", seeds = 1L)
@@ -128,6 +129,42 @@ model <- build_model(q, setup, state, response = "none")
 run(model, ndays = q$ndays, seed = 5)
 expect_true(is.na(state$runs[[1]]$first_alert))
 expect_equal(get_param(model, "Detection rate"), q$detection_rate)
+
+# The alert's campaign doses every unvaccinated agent not detected as a
+# case when the rate is 1; vaccinated students are not excluded.
+q <- p
+q$transmission_rate <- 0
+q$detection_rate <- 1
+q$case_report_delay <- 0
+q$prob_hospitalization <- 0
+q$campaign_rate <- 1
+q$ndays <- 30
+state <- new.env(parent = emptyenv())
+model <- build_model(q, setup, state, response = "cases", seeds = 1L)
+run(model, ndays = q$ndays, seed = 3)
+run1 <- state$runs[[1]]
+alert_day <- run1$first_alert
+expect_equal(sum(run1$daily$doses), p$n - length(setup$vaccinated) - 1)
+expect_equal(run1$daily$doses[alert_day], sum(run1$daily$doses))
+expect_equal(sum(run1$daily$excluded), 0)
+
+# Campaign doses protect: paired runs with an early wastewater alert.
+q <- p
+q$ww_false_positive <- 1
+q$ww_sampling_days <- 0:6
+q$detection_rate <- 0
+q$alert_detection_rate <- 0
+q$prob_hospitalization <- 0
+q$transmission_rate <- 3 * p$transmission_rate
+infected <- vapply(c(0, 0.5), function(rate) {
+  q$campaign_rate <- rate
+  set.seed(21)
+  state <- new.env(parent = emptyenv())
+  model <- build_model(q, setup, state, "wastewater", seeds = c(1L, 3L))
+  run(model, ndays = q$ndays, seed = 21)
+  sum(state$runs[[1]]$infections_by_age)
+}, 0)
+expect_true(infected[2] < infected[1])
 
 # Students are dealt into schools of about the target size.
 level <- rep(c(1, 2, NA), c(2600, 1400, 1000))

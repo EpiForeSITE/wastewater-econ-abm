@@ -380,7 +380,13 @@ Any reported case starts or extends a county-wide public health alert of
 `r p$response_days` days (health alerts to clinicians, more testing). During
 the alert, the daily detection probability rises to
 `r round(p$alert_detection_rate, 3)`, which reports
-`r 100 * p$alert_reporting_fraction`% of cases. A reported student case also
+`r 100 * p$alert_reporting_fraction`% of cases, and a vaccination campaign
+runs: each day, every agent not yet vaccinated and not detected as a case
+receives an MMR dose with probability `r p$campaign_rate` (about
+`r round(100 * (1 - (1 - p$campaign_rate)^p$response_days))`% of them over
+one `r p$response_days`-day alert; see [literature.md](../literature.md)).
+Doses also go to agents with undetected infections, as in practice, but
+protect only susceptible agents, from the next day. A reported student case also
 excludes the unvaccinated students of that
 school who have not been detected as cases. They return `r p$response_days`
 days after the school's last reported case, and a school can be excluded
@@ -472,7 +478,8 @@ replicates <- rbindlist(lapply(runs, function(x) {
     alert_days                  = sum(d$alert_on),
     exclusion_episodes          = x$episodes,
     first_exclusion_day         = x$first_exclusion,
-    excluded_student_days       = sum(d$excluded)
+    excluded_student_days       = sum(d$excluded),
+    campaign_doses              = sum(d$doses)
   )
 }))
 daily <- rbindlist(lapply(runs, function(x) {
@@ -523,7 +530,8 @@ sizes are skewed, so the table shows quantiles as well as means.
 outcomes <- c(
   "infections", "admissions", "hospital_days", "isolation_days",
   "excluded_student_days", "exclusion_episodes", "samples",
-  "positive_samples", "false_positive_samples", "alerts", "alert_days"
+  "positive_samples", "false_positive_samples", "alerts", "alert_days",
+  "campaign_doses"
 )
 knitr::kable(
   data.frame(
@@ -558,14 +566,15 @@ true-positive wastewater result `r timing[["alert"]]`.
 
 ```{r}
 #| label: fig-incidence
-#| fig-width: 8
+#| fig-width: 9
 #| fig-height: 3.5
 #| echo: false
-#| fig-cap: Mean daily new infections and excluded students across
-#|   replicates, including those that die out.
+#| fig-cap: Mean daily new infections, excluded students and campaign doses
+#|   across replicates, including those that die out.
 incidence <- daily[, .(
   `New infections`    = mean(new_infections),
-  `Excluded students` = mean(excluded)
+  `Excluded students` = mean(excluded),
+  `Campaign doses`    = mean(doses)
 ), by = day]
 incidence <- melt(incidence, id.vars = "day")
 ggplot(incidence, aes(day, value)) +
@@ -586,5 +595,9 @@ vaccinated agents, and adult coverage is assumed. Excluded students keep
 their community contacts, and non-student cases trigger no school action.
 The reporting fraction comes from one outbreak in southwest Utah and may
 differ in Salt Lake County, and the reporting fraction during an alert is
-assumed. These are modeling assumptions, not
+assumed. The campaign rate is derived from two outbreak responses (New
+York City and Swansea) rather than from Utah; it reaches every unvaccinated
+agent equally, ignores the targeting of exposed people within 72 hours, and
+does not let excluded students return once vaccinated. These are modeling
+assumptions, not
 estimates validated against observed Salt Lake County outbreaks.
