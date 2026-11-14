@@ -7,8 +7,8 @@ county_population,1220916
 county_scale,10.1743
 replicates,200
 schools,41
-transmission_rate,0.151579759173398
-simulated_r0,6.74
+transmission_rate,0.114549977710105
+simulated_r0,6.998
 epiworldR_commit,
-git_commit,48b1852a36159b286109caaba5538947493e9eeb
-rendered,2026-11-13 17:21 MST
+git_commit,cc1e6623c8b8eb8b2f986580080a1d8c497c7c8a
+rendered,2026-11-13 18:46 MST

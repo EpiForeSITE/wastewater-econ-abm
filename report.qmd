@@ -23,6 +23,22 @@ scenario <- read_scenario(
   defaults = read_parameters("data/parameters.csv")
 )
 p <- scenario$p
+
+# Detection reports the target share of cases, counting hospitalizations.
+p$detection_rate <- rash_detection_rate(
+  reporting       = p$reporting_fraction,
+  hospitalization = rash_hospitalization_rate(
+    probability = p$prob_hospitalization,
+    mean        = p$rash_period,
+    sd          = p$rash_period_sd
+  ),
+  mean            = p$rash_period,
+  sd              = p$rash_period_sd
+)
+p$alert_detection_rate <- min(
+  1,
+  p$detection_rate * (1 + p$alert_detection_increase)
+)
 day_names <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
 # Default to 200 replicates on five cores; fewer help while editing.
@@ -37,7 +53,7 @@ alert_text <- if (scenario$response == "wastewater") {
   sprintf(
     paste(
       "In this scenario the alert reduces community contacts by %g%% and",
-      "raises the daily detection probability to %g. Wastewater cannot",
+      "raises the daily detection probability to %.3f. Wastewater cannot",
       "locate the outbreak, so it cannot act on a single school."
     ),
     100 * p$community_contact_reduction,
@@ -70,12 +86,14 @@ their sources; the scenario changes these:
 ```{r}
 #| echo: false
 defaults <- read_parameters("data/parameters.csv")
-changed <- names(p)[!mapply(identical, p, defaults[names(p)])]
+changed <- names(defaults)[
+  !mapply(identical, scenario$p[names(defaults)], defaults)
+]
 if (length(changed)) {
   knitr::kable(data.frame(
     parameter = changed,
     default   = vapply(defaults[changed], toString, ""),
-    scenario  = vapply(p[changed], toString, "")
+    scenario  = vapply(scenario$p[changed], toString, "")
   ), row.names = FALSE)
 } else {
   cat("No parameters differ from the defaults.\n")
@@ -352,13 +370,19 @@ c(
 
 ## Surveillance and response
 
-Each day of rash, a case is detected with probability `r p$detection_rate`
-and isolated; detected cases are reported `r p$case_report_delay` days
-later. A reported student case excludes the unvaccinated students of that
+`r 100 * p$reporting_fraction`% of cases are reported. Each day of rash, a
+case is detected with probability `r round(p$detection_rate, 3)` and
+isolated, and hospitalized cases (`r 100 * p$prob_hospitalization`% of
+infections) are always detected; the detection probability is solved so
+that, together, they report `r 100 * p$reporting_fraction`% of cases.
+Detected cases are reported `r p$case_report_delay` days later.
+A reported student case excludes the unvaccinated students of that
 school who have not been detected as cases. They return `r p$response_days`
 days after the school's last reported case, and a school can be excluded
 more than once.
 
+Infected agents shed into wastewater from `r p$ww_t_start` days before
+prodrome onset until `r p$ww_t_end` days after it, peaking at rash onset.
 Wastewater is sampled on `r sampling_days`, and results arrive
 `r p$ww_lab_delay` days after sampling. A sample is positive if it reaches
 the limit of detection or, with probability
@@ -414,7 +438,7 @@ describes every column. Counts are for the
 
 ```{r}
 # Summarize each run and keep its daily series and age distribution.
-first_day <- function(x) if (any(x)) which(x)[1] else NA_integer_
+first_day <- function(x) if (any(x, na.rm = TRUE)) which(x)[1] else NA_integer_
 replicates <- rbindlist(lapply(runs, function(x) {
   d <- x$daily
   data.table(
@@ -438,6 +462,8 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
+      p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
     reduced_contact_person_days = if (scenario$response == "wastewater") {
       p$n * p$community_contact_reduction * sum(d$alert_on)
@@ -515,15 +541,20 @@ knitr::kable(
 ```{r}
 #| echo: false
 reported <- replicates[!is.na(first_report_day)]
+reported_pct <- round(
+  100 * sum(replicates$reported_cases) / sum(replicates$infections)
+)
 timing <- c(
   report = median(reported$first_report_day),
-  alert  = median(reported$first_alert_day, na.rm = TRUE)
+  alert  = median(reported$first_true_positive_day, na.rm = TRUE)
 )
 ```
 
-Of the replicates, `r nrow(reported)` had a reported case. In those, the
+Across replicates, `r reported_pct`% of infections were reported (target
+`r 100 * p$reporting_fraction`%). Of the replicates, `r nrow(reported)` had a
+reported case. In those, the
 median day of the first case report was `r timing[["report"]]`, and of the
-first positive wastewater result `r timing[["alert"]]`.
+first true-positive wastewater result `r timing[["alert"]]`.
 
 ```{r}
 #| label: fig-incidence
@@ -552,7 +583,7 @@ wastewater process assumes the whole modeled population contributes to one
 catchment, so an alert cannot be traced to a school. Vaccination reduces each
 contact's infection probability rather than fully protecting a share of
 vaccinated agents, and adult coverage is assumed. Excluded students keep
-their community contacts, and non-student cases trigger no school action. A
-daily detection probability of `r p$detection_rate` finds most cases, which
-is likely more than in practice. These are modeling assumptions, not
+their community contacts, and non-student cases trigger no school action.
+The reporting fraction comes from one outbreak in southwest Utah and may
+differ in Salt Lake County. These are modeling assumptions, not
 estimates validated against observed Salt Lake County outbreaks.

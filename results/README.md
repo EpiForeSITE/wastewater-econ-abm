@@ -55,7 +55,8 @@ upper quantiles alongside means.
 | `positive_samples` | Positive samples, including false positives |
 | `false_positive_samples` | Positive samples drawn as false positives |
 | `alerts` | Distinct wastewater alerts (an alert extended by a new positive counts once) |
-| `first_alert_day` | Day the first positive result arrived (empty if none) |
+| `first_alert_day` | Day the first positive result arrived, true or false (empty if none) |
+| `first_true_positive_day` | Day the first true-positive result arrived: sample day plus lab delay (empty if none) |
 | `alert_days` | Days with an alert on |
 | `reduced_contact_person_days` | Agents × alert days × the contact reduction; zero unless the response is `wastewater` |
 | `exclusion_episodes` | School exclusions started |

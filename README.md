@@ -20,14 +20,17 @@ structure and school MMR coverage.
   setting matrices; school contacts are moved from the community layer to the
   school layer, so a student's total contacts match the data.
 - **Disease.** Infection, a latent period, an infectious prodrome, and an
-  infectious rash. Cases with rash are detected with probability 0.5 a day,
-  isolated, and reported three days later; some are hospitalized.
+  infectious rash. A quarter of cases are reported, as estimated for an
+  outbreak in southwest Utah: hospitalized cases (2% of infections)
+  and cases detected during rash are isolated and reported three days
+  later.
 - **Case response.** A reported student case excludes the school's
   unvaccinated students for 42 days after its last reported case.
-- **Wastewater.** Infected agents shed into one county-wide catchment.
+- **Wastewater.** Infected agents shed into one county-wide catchment
+  from prodrome onset (about four days before rash) for about two weeks.
   Samples are taken twice a week and return a result some days later; a
   positive result starts a 42-day county-wide alert that reduces community
-  contacts by 10% and raises the daily detection probability to 0.6.
+  contacts by 10% and raises the daily detection probability by 20%.
 - **Calibration.** The per-contact transmission probability is set so that
   an imported case causes seven secondary infections on average in a fully
   susceptible population.
@@ -41,7 +44,7 @@ flowchart LR
 
   subgraph disease [Disease]
     S[Susceptible] --> L[Latent] --> P[Prodromal] --> R[Rash]
-    R -->|"detected<br/>(0.5 a day)"| I[Isolated]
+    R -->|"detected<br/>(25% reported)"| I[Isolated]
     R --> H[Hospitalized]
     I --> H
     R --> Rec[Recovered]
@@ -55,7 +58,7 @@ flowchart LR
   P --> Shed[Shedding into<br/>wastewater]
   R --> Shed
   Shed --> Sample[Sample<br/>twice a week] -->|lab delay| Pos{Positive?}
-  Pos -->|yes| Alert["County alert, 42 days:<br/>community contacts -10%,<br/>detection 0.6"]
+  Pos -->|yes| Alert["County alert, 42 days:<br/>community contacts -10%,<br/>detection +20%"]
   Alert -.-> C
 
   I -->|report delay| Excl["School exclusion, 42 days:<br/>unvaccinated students<br/>leave the school layer"]

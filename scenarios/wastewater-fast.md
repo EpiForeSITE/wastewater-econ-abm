@@ -141,11 +141,13 @@ school_probability <- school_contact_prob(
   per_student = contact_split$per_student
 )
 
-# The shedding kernel is normalized to one per prodromal-onset cohort.
-tau <- 0:p$ww_t_end
+# The shedding kernel is normalized to one per prodromal-onset cohort; it
+# runs from ww_t_start days before prodrome onset to ww_t_end after.
+tau <- -p$ww_t_start:p$ww_t_end
+rise <- p$ww_t_peak + p$ww_t_start
 log_shedding <- ifelse(
   test = tau <= p$ww_t_peak,
-  yes  = p$ww_log10_vpeak * tau / p$ww_t_peak,
+  yes  = p$ww_log10_vpeak * (tau + p$ww_t_start) / rise,
   no   = p$ww_log10_vpeak * (p$ww_t_end - tau) / (p$ww_t_end - p$ww_t_peak)
 )
 kernel <- 10^log_shedding
@@ -312,23 +314,27 @@ c(
 ```
 
         analytic_rate transmission_rate      simulated_r0 
-            0.1378513         0.1515798         6.7400000 
+            0.1062152         0.1145500         6.9980000 
 
 ## Surveillance and response
 
-Each day of rash, a case is detected with probability 0.5 and isolated;
-detected cases are reported 3 days later. A reported student case
-excludes the unvaccinated students of that school who have not been
-detected as cases. They return 42 days after the school’s last reported
-case, and a school can be excluded more than once.
+25% of cases are reported. Each day of rash, a case is detected with
+probability 0.065 and isolated, and hospitalized cases (2% of
+infections) are always detected; the detection probability is solved so
+that, together, they report 25% of cases. Detected cases are reported 3
+days later. A reported student case excludes the unvaccinated students
+of that school who have not been detected as cases. They return 42 days
+after the school’s last reported case, and a school can be excluded more
+than once.
 
-Wastewater is sampled on Mon and Thu, and results arrive 2 days after
-sampling. A sample is positive if it reaches the limit of detection or,
-with probability 0.005, falsely. A positive result starts or extends a
-county-wide alert of 42 days. In this scenario the alert reduces
-community contacts by 10% and raises the daily detection probability to
-0.6. Wastewater cannot locate the outbreak, so it cannot act on a single
-school.
+Infected agents shed into wastewater from 0 days before prodrome onset
+until 18 days after it, peaking at rash onset. Wastewater is sampled on
+Mon and Thu, and results arrive 2 days after sampling. A sample is
+positive if it reaches the limit of detection or, with probability
+0.005, falsely. A positive result starts or extends a county-wide alert
+of 42 days. In this scenario the alert reduces community contacts by 10%
+and raises the daily detection probability to 0.078. Wastewater cannot
+locate the outbreak, so it cannot act on a single school.
 
 ## Run the replicates
 
@@ -378,7 +384,7 @@ are for the 120,000-agent model; multiply by `county_scale` in
 
 ``` r
 # Summarize each run and keep its daily series and age distribution.
-first_day <- function(x) if (any(x)) which(x)[1] else NA_integer_
+first_day <- function(x) if (any(x, na.rm = TRUE)) which(x)[1] else NA_integer_
 replicates <- rbindlist(lapply(runs, function(x) {
   d <- x$daily
   data.table(
@@ -402,6 +408,8 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
+      p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
     reduced_contact_person_days = if (scenario$response == "wastewater") {
       p$n * p$community_contact_reduction * sum(d$alert_on)
@@ -458,22 +466,23 @@ sizes are skewed, so the table shows quantiles as well as means.
 
 |  | outcome | mean | median | q90 | max |
 |:---|:---|---:|---:|---:|---:|
-| infections | infections | 16.3 | 4 | 46.6 | 154 |
-| admissions | admissions | 2.7 | 1 | 8.2 | 33 |
-| hospital_days | hospital_days | 18.2 | 1 | 55.0 | 207 |
-| isolation_days | isolation_days | 34.7 | 9 | 107.3 | 336 |
-| excluded_student_days | excluded_student_days | 13169.1 | 4935 | 33526.9 | 117632 |
-| exclusion_episodes | exclusion_episodes | 3.5 | 1 | 9.0 | 30 |
-| samples | samples | 105.0 | 105 | 105.0 | 105 |
-| positive_samples | positive_samples | 2.7 | 1 | 8.0 | 25 |
-| false_positive_samples | false_positive_samples | 0.4 | 0 | 1.0 | 3 |
-| alerts | alerts | 0.9 | 1 | 2.0 | 4 |
-| alert_days | alert_days | 58.3 | 42 | 144.3 | 311 |
-| reduced_contact_person_days | reduced_contact_person_days | 699660.0 | 504000 | 1731600.0 | 3732000 |
+| infections | infections | 42.6 | 5.0 | 127.1 | 516 |
+| admissions | admissions | 0.7 | 0.0 | 3.0 | 8 |
+| hospital_days | hospital_days | 5.1 | 0.0 | 17.2 | 67 |
+| isolation_days | isolation_days | 21.3 | 3.5 | 66.0 | 286 |
+| excluded_student_days | excluded_student_days | 12544.6 | 2310.0 | 42386.1 | 158789 |
+| exclusion_episodes | exclusion_episodes | 3.4 | 1.0 | 10.2 | 44 |
+| samples | samples | 105.0 | 105.0 | 105.0 | 105 |
+| positive_samples | positive_samples | 6.0 | 2.0 | 20.0 | 55 |
+| false_positive_samples | false_positive_samples | 0.5 | 0.0 | 1.0 | 3 |
+| alerts | alerts | 1.2 | 1.0 | 3.0 | 5 |
+| alert_days | alert_days | 87.6 | 45.0 | 245.6 | 342 |
+| reduced_contact_person_days | reduced_contact_person_days | 1051740.0 | 540000.0 | 2947200.0 | 4104000 |
 
-Of the replicates, 197 had a reported case. In those, the median day of
-the first case report was 19, and of the first positive wastewater
-result 46.5.
+Across replicates, 27% of infections were reported (target 25%). Of the
+replicates, 139 had a reported case. In those, the median day of the
+first case report was 35, and of the first true-positive wastewater
+result 52.
 
 <div id="fig-incidence">
 
@@ -493,7 +502,7 @@ contributes to one catchment, so an alert cannot be traced to a school.
 Vaccination reduces each contact’s infection probability rather than
 fully protecting a share of vaccinated agents, and adult coverage is
 assumed. Excluded students keep their community contacts, and
-non-student cases trigger no school action. A daily detection
-probability of 0.5 finds most cases, which is likely more than in
-practice. These are modeling assumptions, not estimates validated
-against observed Salt Lake County outbreaks.
+non-student cases trigger no school action. The reporting fraction comes
+from one outbreak in southwest Utah and may differ in Salt Lake County.
+These are modeling assumptions, not estimates validated against observed
+Salt Lake County outbreaks.

@@ -137,11 +137,13 @@ school_probability <- school_contact_prob(
   per_student = contact_split$per_student
 )
 
-# The shedding kernel is normalized to one per prodromal-onset cohort.
-tau <- 0:p$ww_t_end
+# The shedding kernel is normalized to one per prodromal-onset cohort; it
+# runs from ww_t_start days before prodrome onset to ww_t_end after.
+tau <- -p$ww_t_start:p$ww_t_end
+rise <- p$ww_t_peak + p$ww_t_start
 log_shedding <- ifelse(
   test = tau <= p$ww_t_peak,
-  yes  = p$ww_log10_vpeak * tau / p$ww_t_peak,
+  yes  = p$ww_log10_vpeak * (tau + p$ww_t_start) / rise,
   no   = p$ww_log10_vpeak * (p$ww_t_end - tau) / (p$ww_t_end - p$ww_t_peak)
 )
 kernel <- 10^log_shedding
@@ -308,21 +310,26 @@ c(
 ```
 
         analytic_rate transmission_rate      simulated_r0 
-            0.1378513         0.1515798         6.7400000 
+            0.1062152         0.1145500         6.9980000 
 
 ## Surveillance and response
 
-Each day of rash, a case is detected with probability 0.5 and isolated;
-detected cases are reported 3 days later. A reported student case
-excludes the unvaccinated students of that school who have not been
-detected as cases. They return 42 days after the school’s last reported
-case, and a school can be excluded more than once.
+25% of cases are reported. Each day of rash, a case is detected with
+probability 0.065 and isolated, and hospitalized cases (2% of
+infections) are always detected; the detection probability is solved so
+that, together, they report 25% of cases. Detected cases are reported 3
+days later. A reported student case excludes the unvaccinated students
+of that school who have not been detected as cases. They return 42 days
+after the school’s last reported case, and a school can be excluded more
+than once.
 
-Wastewater is sampled on Mon and Thu, and results arrive 4 days after
-sampling. A sample is positive if it reaches the limit of detection or,
-with probability 0.005, falsely. A positive result starts or extends a
-county-wide alert of 42 days. In this scenario nothing acts on the
-alerts; they are recorded as the alerts the program would have issued.
+Infected agents shed into wastewater from 0 days before prodrome onset
+until 18 days after it, peaking at rash onset. Wastewater is sampled on
+Mon and Thu, and results arrive 4 days after sampling. A sample is
+positive if it reaches the limit of detection or, with probability
+0.005, falsely. A positive result starts or extends a county-wide alert
+of 42 days. In this scenario nothing acts on the alerts; they are
+recorded as the alerts the program would have issued.
 
 ## Run the replicates
 
@@ -372,7 +379,7 @@ are for the 120,000-agent model; multiply by `county_scale` in
 
 ``` r
 # Summarize each run and keep its daily series and age distribution.
-first_day <- function(x) if (any(x)) which(x)[1] else NA_integer_
+first_day <- function(x) if (any(x, na.rm = TRUE)) which(x)[1] else NA_integer_
 replicates <- rbindlist(lapply(runs, function(x) {
   d <- x$daily
   data.table(
@@ -396,6 +403,8 @@ replicates <- rbindlist(lapply(runs, function(x) {
     false_positive_samples      = sum(d$ww_false, na.rm = TRUE),
     alerts                      = x$alerts,
     first_alert_day             = x$first_alert,
+    first_true_positive_day     = first_day(d$ww_positive & !d$ww_false) +
+      p$ww_lab_delay,
     alert_days                  = sum(d$alert_on),
     reduced_contact_person_days = if (scenario$response == "wastewater") {
       p$n * p$community_contact_reduction * sum(d$alert_on)
@@ -452,22 +461,23 @@ sizes are skewed, so the table shows quantiles as well as means.
 
 |  | outcome | mean | median | q90 | max |
 |:---|:---|---:|---:|---:|---:|
-| infections | infections | 38.2 | 4 | 140.1 | 522 |
-| admissions | admissions | 6.1 | 1 | 23.2 | 107 |
-| hospital_days | hospital_days | 43.2 | 2 | 142.0 | 821 |
-| isolation_days | isolation_days | 74.9 | 9 | 272.9 | 1002 |
-| excluded_student_days | excluded_student_days | 24105.0 | 5124 | 84523.0 | 276145 |
-| exclusion_episodes | exclusion_episodes | 6.3 | 1 | 22.1 | 68 |
+| infections | infections | 67.6 | 5 | 282.5 | 744 |
+| admissions | admissions | 1.1 | 0 | 4.0 | 14 |
+| hospital_days | hospital_days | 7.6 | 0 | 23.3 | 114 |
+| isolation_days | isolation_days | 27.7 | 3 | 115.1 | 343 |
+| excluded_student_days | excluded_student_days | 15072.4 | 2310 | 58793.3 | 155992 |
+| exclusion_episodes | exclusion_episodes | 4.4 | 1 | 17.1 | 40 |
 | samples | samples | 105.0 | 105 | 105.0 | 105 |
-| positive_samples | positive_samples | 5.3 | 1 | 21.0 | 66 |
-| false_positive_samples | false_positive_samples | 0.4 | 0 | 1.0 | 4 |
-| alerts | alerts | 1.0 | 1 | 2.0 | 4 |
-| alert_days | alert_days | 71.3 | 42 | 250.4 | 333 |
+| positive_samples | positive_samples | 8.9 | 1 | 35.6 | 71 |
+| false_positive_samples | false_positive_samples | 0.5 | 0 | 1.0 | 3 |
+| alerts | alerts | 1.1 | 1 | 2.0 | 3 |
+| alert_days | alert_days | 92.7 | 42 | 295.3 | 344 |
 | reduced_contact_person_days | reduced_contact_person_days | 0.0 | 0 | 0.0 | 0 |
 
-Of the replicates, 197 had a reported case. In those, the median day of
-the first case report was 19, and of the first positive wastewater
-result 48.5.
+Across replicates, 23% of infections were reported (target 25%). Of the
+replicates, 141 had a reported case. In those, the median day of the
+first case report was 34, and of the first true-positive wastewater
+result 54.
 
 <div id="fig-incidence">
 
@@ -487,7 +497,7 @@ contributes to one catchment, so an alert cannot be traced to a school.
 Vaccination reduces each contact’s infection probability rather than
 fully protecting a share of vaccinated agents, and adult coverage is
 assumed. Excluded students keep their community contacts, and
-non-student cases trigger no school action. A daily detection
-probability of 0.5 finds most cases, which is likely more than in
-practice. These are modeling assumptions, not estimates validated
-against observed Salt Lake County outbreaks.
+non-student cases trigger no school action. The reporting fraction comes
+from one outbreak in southwest Utah and may differ in Salt Lake County.
+These are modeling assumptions, not estimates validated against observed
+Salt Lake County outbreaks.

@@ -439,6 +439,40 @@ rash_hospitalization_rate <- function(probability, mean, sd) {
   )$root
 }
 
+#' Daily rash detection probability for a target reporting fraction
+#'
+#' A case is reported if it is detected or hospitalized during its rash,
+#' so the daily detection probability `h` solves
+#' `1 - E[((1 - h) (1 - r))^D] = reporting`, where `r` is the daily
+#' hospitalization probability and `D` the rounded lognormal rash duration.
+#' Competing daily events are treated as independent.
+#' @param reporting Target share of cases that are reported.
+#' @param hospitalization Daily hospitalization probability during rash.
+#' @param mean,sd Mean and standard deviation of rash duration in days.
+#' @return Daily detection probability.
+#' @examples
+#' r <- rash_hospitalization_rate(probability = 0.02, mean = 4, sd = 1)
+#' rash_detection_rate(reporting = 0.25, hospitalization = r, mean = 4,
+#'   sd = 1)
+rash_detection_rate <- function(reporting, hospitalization, mean, sd) {
+  stopifnot(reporting > 0, reporting < 1, mean > 0, sd > 0)
+
+  # Rounded lognormal rash duration, as in rash_hospitalization_rate().
+  s2 <- log1p((sd / mean)^2)
+  days <- seq_len(1000L)
+  mass <- diff(c(0, stats::plnorm(days + .5, log(mean) - s2 / 2, sqrt(s2))))
+  reported <- function(h) {
+    1 - sum(mass * ((1 - h) * (1 - hospitalization))^days)
+  }
+  if (reported(0) >= reporting) {
+    stop("Hospitalizations alone exceed the reporting fraction")
+  }
+  stats::uniroot(
+    f        = function(h) reported(h) - reporting,
+    interval = c(0, 1)
+  )$root
+}
+
 #' Create the surveillance and response event
 #'
 #' Every response records the same surveillance signals, so paired runs stay

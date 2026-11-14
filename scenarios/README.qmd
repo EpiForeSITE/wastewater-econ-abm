@@ -101,16 +101,23 @@ knitr::kable(
 ## Timeliness
 
 For replicates with at least one reported case, the lead time is the day of
-the first case report minus the day of the first positive wastewater result
-(positive values mean wastewater was first).
+the first case report minus the day the first true-positive wastewater result
+arrived (positive values mean wastewater was first). False positives are
+excluded.
+
+```{r}
+#| include: false
+replicates[, lead := first_report_day - first_true_positive_day]
+```
 
 ```{r}
 lead <- replicates[!is.na(first_report_day), .(
-  replicates       = .N,
-  alert_first_pct  = 100 * mean(
-    !is.na(first_alert_day) & first_alert_day < first_report_day
-  ),
-  lead_days_median = median(first_report_day - first_alert_day, na.rm = TRUE)
+  replicates          = .N,
+  ww_positive_pct     = 100 * mean(!is.na(first_true_positive_day)),
+  ww_first_pct        = 100 * mean(!is.na(lead) & lead > 0),
+  lead_days_median    = median(lead, na.rm = TRUE),
+  lead_days_q25       = quantile(lead, 0.25, na.rm = TRUE),
+  lead_days_q75       = quantile(lead, 0.75, na.rm = TRUE)
 ), keyby = scenario]
 knitr::kable(lead, digits = 1)
 ```

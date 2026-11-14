@@ -3,6 +3,8 @@ source("../model.R")
 set.seed(137)
 defaults <- read_parameters("../data/parameters.csv")
 p <- defaults
+p$detection_rate <- 0.5
+p$alert_detection_rate <- 0.6
 p$n <- 2000
 p$n_seed <- 5
 p$ndays <- 60
@@ -160,6 +162,7 @@ expect_true(any(latent$counts[latent$date > q$incubation_period + 1] > 0))
 
 # Splitting contacts into community and school layers keeps age totals and R0.
 p <- defaults
+p$detection_rate <- 0.5
 p$n <- 20000
 p$n_seed <- 20
 p$ndays <- 40
@@ -247,3 +250,55 @@ bad <- tempfile(fileext = ".yml")
 writeLines(c("typo:", "  ww_lab_dealy: 2"), bad)
 expect_error(read_scenario(bad, "typo", defaults), "ww_lab_dealy")
 expect_error(read_scenario(bad, "missing", defaults), "not defined")
+
+# Detection plus hospitalization reports the target share of cases.
+q <- p
+q$n <- 4000
+q$n_seed <- q$n
+q$ndays <- 40
+q$transmission_rate <- 0
+setup_r <- setup
+setup_r$persons <- list(
+  age_group = rep(0L, q$n),
+  school    = rep(NA_integer_, q$n)
+)
+setup_r$community <- matrix(1, 1, 1)
+q$detection_rate <- rash_detection_rate(
+  reporting       = 0.25,
+  hospitalization = rash_hospitalization_rate(
+    probability = q$prob_hospitalization,
+    mean        = q$rash_period,
+    sd          = q$rash_period_sd
+  ),
+  mean            = q$rash_period,
+  sd              = q$rash_period_sd
+)
+state <- new.env(parent = emptyenv())
+model <- build_model(q, setup_r, state)
+run(model, ndays = q$ndays, seed = 21)
+detected <- sum(state$runs[[1]]$daily$new_detected)
+expect_true(abs(detected / q$n - 0.25) < 0.03)
+expect_error(
+  rash_detection_rate(0.25, hospitalization = 0.2, mean = 4, sd = 1),
+  "Hospitalizations alone"
+)
+
+# Shedding that starts before prodrome onset moves the signal earlier.
+q <- p
+q$n <- length(setup$persons$age_group)
+q$n_seed <- 50
+q$ndays <- 40
+q$transmission_rate <- 0
+q$ww_sampling_days <- 0:6
+q$ww_sigma <- 0
+q$ww_false_positive <- 0
+first_positive <- function(start) {
+  q$ww_t_start <- start
+  setup$kernel <- rep(1 / (start + 19), start + 19)
+  state <- new.env(parent = emptyenv())
+  run(build_model(q, setup, state), ndays = q$ndays, seed = 4)
+  which(state$runs[[1]]$daily$ww_positive)[1]
+}
+expect_true(first_positive(3) < first_positive(0))
+q$ww_t_start <- q$ww_lab_delay + 1
+expect_error(build_model(q, setup, new.env(parent = emptyenv())))

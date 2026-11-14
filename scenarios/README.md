@@ -13,7 +13,7 @@ has its own report:
 | [wastewater-fast](wastewater-fast.md) | wastewater | Wastewater surveillance with a faster turnaround: results two days after collection. |
 
 All scenarios share 200 replicates, the same population, vaccination and
-calibrated transmission rate (0.152 per contact). Counts are for the
+calibrated transmission rate (0.115 per contact). Counts are for the
 120,000-agent model; multiply by 10.17 for Salt Lake County.
 
 ## Outcomes by scenario
@@ -23,9 +23,9 @@ small, so means are driven by the outbreaks that grow.
 
 | scenario | infections_mean | infections_median | infections_q90 | admissions | hospital_days | excluded_student_days | samples | alert_days | reduced_contact_days |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| baseline | 38.2 | 4 | 140.1 | 6.1 | 43.2 | 24105.0 | 105 | 71.3 | 0 |
-| wastewater | 16.2 | 4 | 45.1 | 2.5 | 17.2 | 13154.3 | 105 | 57.2 | 685860 |
-| wastewater-fast | 16.3 | 4 | 46.6 | 2.7 | 18.2 | 13169.1 | 105 | 58.3 | 699660 |
+| baseline | 67.6 | 5 | 282.5 | 1.1 | 7.6 | 15072.4 | 105 | 92.7 | 0 |
+| wastewater | 35.6 | 5 | 130.2 | 0.7 | 4.8 | 11530.9 | 105 | 83.3 | 999120 |
+| wastewater-fast | 42.6 | 5 | 127.1 | 0.7 | 5.1 | 12544.6 | 105 | 87.6 | 1051740 |
 
 ## Paired differences from the baseline
 
@@ -36,17 +36,18 @@ values favor the scenario.
 
 | scenario | infections_averted | infections_averted_median | fewer_infections_pct | more_infections_pct | admissions_averted | hospital_days_averted | excluded_days_averted | reduced_contact_days_added |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|
-| wastewater | 22.0 | 0 | 24.5 | 14.5 | 3.6 | 26.0 | 10950.7 | 685860 |
-| wastewater-fast | 21.9 | 0 | 25.5 | 15.5 | 3.5 | 24.9 | 10935.9 | 699660 |
+| wastewater | 32.1 | 0 | 27.5 | 16.0 | 0.4 | 2.9 | 3541.4 | 999120 |
+| wastewater-fast | 25.0 | 0 | 25.0 | 20.5 | 0.4 | 2.6 | 2527.8 | 1051740 |
 
 ## Timeliness
 
 For replicates with at least one reported case, the lead time is the day
-of the first case report minus the day of the first positive wastewater
-result (positive values mean wastewater was first).
+of the first case report minus the day the first true-positive
+wastewater result arrived (positive values mean wastewater was first).
+False positives are excluded.
 
-| scenario        | replicates | alert_first_pct | lead_days_median |
-|:----------------|-----------:|----------------:|-----------------:|
-| baseline        |        197 |             5.1 |              -27 |
-| wastewater      |        197 |             5.1 |              -27 |
-| wastewater-fast |        197 |             9.6 |              -25 |
+| scenario | replicates | ww_positive_pct | ww_first_pct | lead_days_median | lead_days_q25 | lead_days_q75 |
+|:---|---:|---:|---:|---:|---:|---:|
+| baseline | 141 | 67.4 | 19.9 | -9 | -32.5 | 3.5 |
+| wastewater | 140 | 69.3 | 20.0 | -10 | -36.0 | 3.0 |
+| wastewater-fast | 139 | 68.3 | 27.3 | -8 | -32.5 | 6.5 |
