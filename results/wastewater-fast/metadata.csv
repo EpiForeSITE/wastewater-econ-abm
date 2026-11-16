@@ -1,0 +1,14 @@
+name,value
+scenario,wastewater-fast
+response,wastewater
+description,Wastewater surveillance with a faster turnaround: results two days after collection.
+n,120000
+county_population,1220916
+county_scale,10.1743
+replicates,1000
+schools,41
+transmission_rate,0.114549977710105
+simulated_r0,6.998
+epiworldR_commit,
+git_commit,7e4c1bd88d34b9ed0242fe7d3841a100c80fadf7
+rendered,2026-11-16 10:20 MST

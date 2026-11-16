@@ -6,10 +6,9 @@ ARG TARGETARCH
 
 # Pinned versions. CRAN packages come from a dated Posit Package Manager
 # snapshot; the GitHub packages are pinned to the commits used for the
-# analysis (epiworldR 0.19.0, measles 0.4.1, multigroup.vaccine 0.1.1).
+# analysis. Both local and browser devcontainers use this file.
 ARG CRAN_SNAPSHOT=2026-10-20
-ARG EPIWORLDR_REF=5a138cfdd864e4e5b7a0c5358ca6705782e8cba4
-ARG MEASLES_REF=d1e87fed204ebe820620759fa1b85cdb9d2e0b03
+ARG EPIWORLDR_REF=2f1a5acc7835c44908fab53261d879afc4335e51
 ARG MULTIGROUP_REF=ddd9201f28b9908c033542f6a2445b84619af1c7
 
 RUN echo "options(repos = c(CRAN = 'https://p3m.dev/cran/__linux__/$(lsb_release -cs)/${CRAN_SNAPSHOT}'))" \
@@ -24,19 +23,18 @@ RUN apt-get update && apt-get install --no-install-recommends -y valgrind gdb \
   libglpk-dev pre-commit && rm -rf /var/lib/apt/lists/*
 
 # Adding R packages
-RUN install2.r --error --skipinstalled cpp11 roxygen2 tinytest data.table \
+RUN install2.r --error cpp11 roxygen2 tinytest data.table \
   netplot devtools remotes decor DiagrammeR quarto ggplot2 knitr rmarkdown \
-  socialmixr httpgd languageserver
+  socialmixr httpgd languageserver Rcpp deSolve shiny bslib htmltools
 
-# Measles models and census helpers, pinned to specific commits
-RUN Rscript -e "remotes::install_github('UofUEpiBio/epiworldR@${EPIWORLDR_REF}', upgrade = 'never')" && \
-    Rscript -e "remotes::install_github('UofUEpiBio/measles@${MEASLES_REF}', upgrade = 'never')" && \
-    Rscript -e "remotes::install_github('EpiForeSITE/multigroup-vaccine@${MULTIGROUP_REF}', upgrade = 'never')"
+# Install the layered API and census helpers at their exact commits. The
+# analysis implements contact-matrix reciprocity directly, so it does not
+# require the older measles package, whose C++ headers are incompatible here.
+RUN Rscript -e "remotes::install_github('UofUEpiBio/epiworldR@${EPIWORLDR_REF}', dependencies = FALSE, upgrade = 'never')" && \
+    Rscript -e "remotes::install_github('EpiForeSITE/multigroup-vaccine@${MULTIGROUP_REF}', dependencies = FALSE, upgrade = 'never')"
 
-# Fail the build if the versions do not match what the analysis expects
-RUN Rscript -e "stopifnot( \
-  packageVersion('epiworldR') == '0.19.0', \
-  packageVersion('measles') == '0.4.1', \
-  packageVersion('multigroup.vaccine') == '0.1.1')"
+# Verify package versions, Git commit metadata, and the APIs used by the model.
+COPY check-dependencies.R /tmp/check-dependencies.R
+RUN Rscript /tmp/check-dependencies.R && test "$(quarto --version)" = "1.9.35"
 
 CMD ["bash"]
