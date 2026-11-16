@@ -6,6 +6,11 @@
 # case detection and runs an MMR vaccination campaign, and reported student
 # cases exclude their school's unvaccinated students. With the "wastewater"
 # response, positive wastewater results can also start the alert.
+#
+# Any parameter can be overridden per scenario. For example, a scenario with
+# a weaker vaccination campaign could set:
+#   campaign_rate: 0.005
+#   school_campaign_rate: 0
 
 baseline:
   description: >-

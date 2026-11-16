@@ -385,8 +385,13 @@ runs: each day, every agent not yet vaccinated and not detected as a case
 receives an MMR dose with probability `r p$campaign_rate` (about
 `r round(100 * (1 - (1 - p$campaign_rate)^p$response_days))`% of them over
 one `r p$response_days`-day alert; see [literature.md](../literature.md)).
-Doses also go to agents with undetected infections, as in practice, but
-protect only susceptible agents, from the next day. A reported student case also
+Schools with an active exclusion also hold clinics, which add a daily
+probability of `r p$school_campaign_rate` for their unvaccinated students
+(about
+`r round(100 * (1 - (1 - p$school_campaign_rate)^p$response_days))`% of
+them over `r p$response_days` days). Doses also go to agents with
+undetected infections, as in practice, but protect only susceptible agents,
+from the next day. A reported student case also
 excludes the unvaccinated students of that
 school who have not been detected as cases. They return `r p$response_days`
 days after the school's last reported case, and a school can be excluded
@@ -595,9 +600,9 @@ vaccinated agents, and adult coverage is assumed. Excluded students keep
 their community contacts, and non-student cases trigger no school action.
 The reporting fraction comes from one outbreak in southwest Utah and may
 differ in Salt Lake County, and the reporting fraction during an alert is
-assumed. The campaign rate is derived from two outbreak responses (New
-York City and Swansea) rather than from Utah; it reaches every unvaccinated
-agent equally, ignores the targeting of exposed people within 72 hours, and
-does not let excluded students return once vaccinated. These are modeling
-assumptions, not
-estimates validated against observed Salt Lake County outbreaks.
+assumed. The campaign rates are optimistic: the county-wide rate comes
+from Swansea's school-based catch-up campaign, and the school clinic rate
+is an assumption. The campaign ignores the targeting of exposed people
+within 72 hours and does not let excluded students return once vaccinated.
+These are modeling assumptions, not estimates validated against observed
+Salt Lake County outbreaks.

@@ -28,8 +28,11 @@ structure and school MMR coverage.
 - **Public health alert.** Any reported case starts a 42-day county-wide
   alert (extended by each new trigger). During it, half of cases are
   reported instead of a quarter, and a vaccination campaign gives each
-  unvaccinated agent a 0.5% daily chance of an MMR dose (about a fifth of
-  them over one alert).
+  unvaccinated agent a 1.6% daily chance of an MMR dose (about half of
+  them over one alert). Schools with a reported student case add clinics:
+  a further 4% daily chance for their unvaccinated students. Both rates are
+  optimistic but observed in past outbreaks (see
+  [literature.md](literature.md)).
 - **School exclusions.** A reported student case excludes the school's
   unvaccinated students for 42 days after its last reported case.
 - **Wastewater.** Infected agents shed into one county-wide catchment

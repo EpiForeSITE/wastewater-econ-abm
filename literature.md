@@ -142,11 +142,29 @@ share of unvaccinated people reached. Two responses do:
 - **Swansea:** 60% of the unvaccinated reached in about 56 days, a daily
   rate of ln(1 / 0.4) / 56 ≈ 0.016, through school sessions.
 
-The model uses `campaign_rate = 0.005`: each day of an alert, every agent
-not yet vaccinated (and not detected as a case) gets a dose with
-probability 0.005. That is about 19% of the unvaccinated over one 42-day
-alert, between New York City and Swansea. Southwest Utah's modest response
-argues against the upper end. This is the parameter to vary in a
+Both understate a campaign at its peak. New York City's rate averages
+11 months, while campaigns peak in the first weeks, and Swansea's school
+sessions were concentrated in May, so its peak rate may have been nearer
+0.03. At the other extreme, a Chicago shelter reached 93% coverage within
+4 days [27], about 0.5 a day, but in a closed setting.
+
+The model aims for a plausible but optimistic response, in two parts:
+
+- **County-wide, `campaign_rate = 0.016`** (Swansea): each day of an alert,
+  every agent not yet vaccinated (and not detected as a case) gets a dose
+  with probability 0.016, about 49% of the unvaccinated over one 42-day
+  alert. New York City's 0.0025 (about 10%) is the conservative
+  alternative; southwest Utah's modest response [28] is closer to it.
+- **School clinics, `school_campaign_rate = 0.04`** (assumption): from the
+  day after a school's first reported case, and while its exclusion lasts,
+  its unvaccinated students get a further 0.04 daily chance of a dose:
+  about 82% of them over 42 days, combined with the county-wide rate. This
+  sits between Swansea's school sessions and the Chicago shelter.
+  Wastewater cannot target clinics, since it has no location; school
+  clinics follow only reported cases.
+
+Both are parameters in [data/parameters.csv](data/parameters.csv), and a
+scenario in [scenarios.yml](scenarios.yml) can override either, for a
 sensitivity analysis.
 
 ### When campaigns start

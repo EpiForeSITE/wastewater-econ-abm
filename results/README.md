@@ -68,7 +68,9 @@ An alert raises the daily detection probability so that
 `alert_reporting_fraction` (50%) of cases are reported instead of 25%, and
 runs a vaccination campaign: each day, every agent not yet vaccinated and
 not detected as a case receives an MMR dose with probability
-`campaign_rate` (0.005). Doses also go to undetected infections, so
+`campaign_rate` (0.016), plus `school_campaign_rate` (0.04) for students
+of schools with an active exclusion. Doses also go to undetected
+infections, so
 `campaign_doses` counts every dose given, protective or not. With
 the `cases` response only reported cases start alerts; wastewater samples
 are still recorded.

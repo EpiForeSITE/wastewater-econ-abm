@@ -487,8 +487,10 @@ rash_detection_rate <- function(reporting, hospitalization, mean, sd) {
 #' MMR dose with probability `campaign_rate`. Public health cannot tell
 #' undetected infections from susceptibles, so doses also go to agents
 #' already infected or recovered, but protect only those still susceptible,
-#' from the next day. Students vaccinated before their school is excluded
-#' stay in school.
+#' from the next day. Schools with an active exclusion also hold clinics:
+#' their students get doses with probability `school_campaign_rate` on top
+#' of the county-wide rate. Students vaccinated before their school is
+#' excluded stay in school.
 #' Wastewater is sampled on `ww_sampling_days` of each week. Agents shed
 #' from `ww_t_start` days before prodrome onset, following `setup$kernel`
 #' (one entry per day from that start); because prodrome onsets are known
@@ -647,10 +649,14 @@ response_event <- function(p, setup, response, state, n_seed) {
       state$acting <- on
     }
 
-    # During an alert, unvaccinated agents not detected as cases get MMR.
-    if (on && p$campaign_rate > 0) {
+    # During an alert, unvaccinated agents not detected as cases get MMR,
+    # more often at schools with an active exclusion (school clinics).
+    if (on) {
       pool <- which(!state$vaccinated & !state$detected)
-      dosed <- pool[stats::runif(length(pool)) < p$campaign_rate]
+      rate <- rep(p$campaign_rate, length(pool))
+      clinic <- school[pool] %in% as.integer(names(state$excluded_ids))
+      rate[clinic] <- 1 - (1 - p$campaign_rate) * (1 - p$school_campaign_rate)
+      dosed <- pool[stats::runif(length(pool)) < rate]
       if (length(dosed)) {
         agents <- get_agents(m)
         mmr <- get_tool(m, 0)

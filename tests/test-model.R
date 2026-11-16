@@ -81,6 +81,7 @@ q$detection_rate <- 1
 q$case_report_delay <- 0
 q$prob_hospitalization <- 0
 q$campaign_rate <- 0
+q$school_campaign_rate <- 0
 q$ndays <- 100
 state <- new.env(parent = emptyenv())
 model <- build_model(q, setup, state, response = "cases", seeds = 1L)
@@ -147,6 +148,24 @@ alert_day <- run1$first_alert
 expect_equal(sum(run1$daily$doses), p$n - length(setup$vaccinated) - 1)
 expect_equal(run1$daily$doses[alert_day], sum(run1$daily$doses))
 expect_equal(sum(run1$daily$excluded), 0)
+
+# School clinics dose only the unvaccinated students of the excluded school,
+# from the day after the exclusion starts.
+q <- p
+q$transmission_rate <- 0
+q$detection_rate <- 1
+q$case_report_delay <- 0
+q$prob_hospitalization <- 0
+q$campaign_rate <- 0
+q$school_campaign_rate <- 1
+q$ndays <- 30
+state <- new.env(parent = emptyenv())
+model <- build_model(q, setup, state, response = "cases", seeds = 1L)
+run(model, ndays = q$ndays, seed = 3)
+run1 <- state$runs[[1]]
+first_exclusion <- run1$first_exclusion
+expect_equal(sum(run1$daily$doses), unvaccinated_mates)
+expect_equal(run1$daily$doses[first_exclusion + 1L], unvaccinated_mates)
 
 # Campaign doses protect: paired runs with an early wastewater alert.
 q <- p
