@@ -23,9 +23,9 @@ small, so means are driven by the outbreaks that grow.
 
 | scenario | infections_mean | infections_median | infections_q90 | admissions | hospital_days | excluded_student_days | samples | alert_days | false_positives | campaign_doses |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| baseline | 14.0 | 4 | 41.0 | 0.3 | 1.8 | 5797.4 | 105 | 67.8 | 0.5 | 2877.9 |
-| wastewater | 12.6 | 4 | 35.0 | 0.2 | 1.6 | 5426.4 | 105 | 86.7 | 0.5 | 3648.0 |
-| wastewater-fast | 12.5 | 4 | 35.1 | 0.2 | 1.6 | 5394.2 | 105 | 85.7 | 0.5 | 3605.1 |
+| baseline | 9.5 | 4 | 25.0 | 0.2 | 1.2 | 3675.1 | 105 | 54.1 | 0.6 | 5405.8 |
+| wastewater | 8.4 | 4 | 22.1 | 0.2 | 1.2 | 3396.3 | 105 | 74.2 | 0.6 | 6848.8 |
+| wastewater-fast | 8.3 | 4 | 21.0 | 0.2 | 1.1 | 3373.7 | 105 | 75.3 | 0.6 | 6881.9 |
 
 ## Paired differences from the baseline
 
@@ -36,8 +36,8 @@ values favor the scenario.
 
 | scenario | infections_averted | infections_averted_median | fewer_infections_pct | more_infections_pct | admissions_averted | hospital_days_averted | excluded_days_averted | alert_days_added | doses_added |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| wastewater | 1.4 | 0 | 9.1 | 6.4 | 0 | 0.1 | 371.0 | 18.8 | 770.0 |
-| wastewater-fast | 1.5 | 0 | 10.6 | 6.3 | 0 | 0.1 | 403.2 | 17.8 | 727.2 |
+| wastewater | 1.1 | 0 | 10.6 | 3.5 | 0 | 0.1 | 278.8 | 20.1 | 1443.1 |
+| wastewater-fast | 1.3 | 0 | 12.3 | 3.9 | 0 | 0.2 | 301.4 | 21.2 | 1476.1 |
 
 ## Timeliness
 
@@ -48,9 +48,9 @@ False positives are excluded.
 
 | scenario | replicates | ww_positive_pct | ww_first_pct | lead_days_median | lead_days_q25 | lead_days_q75 |
 |:---|---:|---:|---:|---:|---:|---:|
-| baseline | 704 | 62.9 | 21.9 | -7 | -26.5 | 5 |
-| wastewater | 716 | 62.8 | 22.8 | -6 | -24.8 | 5 |
-| wastewater-fast | 722 | 62.9 | 28.3 | -3 | -23.0 | 5 |
+| baseline | 704 | 56.5 | 21.9 | -3.0 | -18.8 | 8 |
+| wastewater | 714 | 56.0 | 22.4 | -2.5 | -18.0 | 5 |
+| wastewater-fast | 722 | 56.5 | 28.1 | 0.0 | -16.0 | 7 |
 
 ## Alert timing
 
